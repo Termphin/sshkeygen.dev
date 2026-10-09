@@ -1,0 +1,29 @@
+---
+import { termphinUrl } from '../data/site';
+
+interface Props {
+  variant: 'panel' | 'strip';
+}
+
+const { variant } = Astro.props;
+---
+
+{
+  variant === 'panel' ? (
+    <aside class="tp-block tp-panel" aria-labelledby="tp-panel-title">
+      <h2 id="tp-panel-title" class="tp-kicker">Made by Termphin</h2>
+      <p>An SSH client that keeps your session alive when you lock your phone or switch networks.</p>
+      <ul class="tp-points">
+        <li>Sessions survive dropped connections - no tmux setup</li>
+        <li>htop, vim and AI coding agents draw correctly</li>
+        <li>SFTP, snippets, tunnels and jump hosts, completely free</li>
+      </ul>
+      <p class="tp-actions"><a class="tp-btn" href={termphinUrl('home-hero')} rel="noopener">Get Termphin</a></p>
+    </aside>
+  ) : (
+    <p class="tp-strip">
+      <span class="tp-kicker">Made by Termphin</span> - an SSH client that keeps your session alive when you lock your
+      phone or switch networks. <a href={termphinUrl('home-hero-mobile')} rel="noopener">Get Termphin&nbsp;&rarr;</a>
+    </p>
+  )
+}

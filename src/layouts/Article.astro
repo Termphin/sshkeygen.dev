@@ -1,0 +1,112 @@
+---
+import Base from './Base.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import TermphinBox from '../components/TermphinBox.astro';
+import TermphinCta from '../components/TermphinCta.astro';
+import { SITE_NAME, SITE_URL, TERMPHIN_ORGANIZATION, canonicalUrl, guides } from '../data/site';
+
+interface Props {
+  title: string;
+  description: string;
+  path: string;
+  heading: string;
+  lead: string;
+  crumb: string;
+  updated?: string;
+  schema?: Record<string, unknown>[];
+  articleType?: 'TechArticle' | 'Article' | 'WebPage' | 'AboutPage' | null;
+  cta?: boolean;
+  termphinPitch?: string;
+  mentions?: Record<string, unknown>[];
+}
+
+const {
+  title,
+  description,
+  path,
+  heading,
+  lead,
+  crumb,
+  updated = '2026-10-08',
+  schema = [],
+  articleType = 'TechArticle',
+  cta = true,
+  termphinPitch = 'Connecting from a phone or over a flaky network? Termphin is an SSH client whose sessions survive a locked screen, a network switch or a dropped connection.',
+  mentions = [],
+} = Astro.props;
+
+const url = canonicalUrl(path);
+const breadcrumbs = [
+  { name: 'Home', href: '/' },
+  { name: crumb, href: path },
+];
+const jsonLd: Record<string, unknown>[] = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: breadcrumbs.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: canonicalUrl(item.href),
+    })),
+  },
+];
+if (articleType) {
+  jsonLd.push({
+    '@context': 'https://schema.org',
+    '@type': articleType,
+    headline: heading,
+    description,
+    url,
+    mainEntityOfPage: url,
+    inLanguage: 'en',
+    image: `${SITE_URL}/og-image.png`,
+    dateModified: updated,
+    author: TERMPHIN_ORGANIZATION,
+    publisher: { ...TERMPHIN_ORGANIZATION, logo: `${SITE_URL}/icon-512.png` },
+    ...(mentions.length > 0 ? { mentions } : {}),
+  });
+}
+jsonLd.push(...schema);
+const placement = path.replace(/^\//, '');
+const guideIndex = guides.findIndex((guide) => guide.href === path);
+const isGuide = guideIndex !== -1;
+const showTermphin = isGuide && cta;
+const trail = [
+  { name: SITE_NAME, href: '/' },
+  ...(isGuide ? [{ name: 'guides', href: '/#guides' }] : []),
+  { name: placement, href: path },
+];
+const related = isGuide ? [1, 2, 3].map((offset) => guides[(guideIndex + offset) % guides.length]) : [];
+const updatedLabel = new Date(updated).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+---
+
+<Base title={title} description={description} path={path} type="article" jsonLd={jsonLd}>
+  <div class="page">
+    <Breadcrumbs items={trail} />
+    <article class="prose article-head">
+      <h1>{heading}</h1>
+      <p class="lead">{lead}</p>
+      {isGuide && <p class="meta">updated <time datetime={updated}>{updatedLabel}</time></p>}
+      <slot name="answer" />
+      {showTermphin && <TermphinBox placement={`guide-${placement}-top`} pitch={termphinPitch} />}
+      <slot />
+    </article>
+    {
+      related.length > 0 && (
+        <nav class="related" aria-labelledby="related-title">
+          <h2 id="related-title">Related</h2>
+          <ul class="index-list">
+            {related.map((guide) => (
+              <li>
+                <a href={guide.href}>{guide.label}</a> <span>- {guide.summary}</span>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )
+    }
+    {showTermphin && <TermphinCta placement={`guide-${placement}-end`} />}
+  </div>
+</Base>

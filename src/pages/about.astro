@@ -1,0 +1,63 @@
+---
+import Article from '../layouts/Article.astro';
+import { CONTACT_EMAIL, GITHUB_URL, termphinUrl } from '../data/site';
+
+const path = '/about';
+const title = 'About sshkeygen.dev - Open-Source SSH Key Generator';
+const description =
+  'sshkeygen.dev is a free, MIT-licensed SSH key generator that runs entirely in your browser. Who makes it, how it works, and how to verify and self-host it.';
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="About"
+  heading="About sshkeygen.dev"
+  lead="An SSH key generator that runs entirely in your browser, plus the guides to put the key to use."
+  articleType="AboutPage"
+  cta={false}
+>
+  <p>
+    Most people should create keys with <a href="/ssh-keygen">ssh-keygen</a>. This site is for when there is no
+    terminal at hand: a locked-down laptop, a tablet, a colleague who has never opened a shell. Many web generators
+    create keys on a server or ship trackers. This one writes the same OpenSSH files as ssh-keygen and never sends
+    them anywhere.
+  </p>
+
+  <h2 id="how">How it is built</h2>
+  <ul>
+    <li>A static site with no server-side code.</li>
+    <li>
+      Randomness from the Web Crypto API. RSA and ECDSA use the browser's native implementation; Ed25519 uses
+      <code>@noble/curves</code>.
+    </li>
+    <li>
+      The OpenSSH key format, aes256-ctr with bcrypt_pbkdf, fingerprints and randomart are written in TypeScript and
+      tested against the real ssh-keygen.
+    </li>
+    <li>A Content Security Policy that allows no network connections and no third-party resources.</li>
+  </ul>
+
+  <h2 id="open-source">Open source</h2>
+  <p>
+    The source is on <a href={GITHUB_URL} rel="noopener">GitHub</a> under the MIT license. Build it yourself, host it
+    on your own domain or run it offline. Report security problems privately to
+    <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+  </p>
+
+  <h2 id="who">Who makes it</h2>
+  <p>
+    The team behind <a href={termphinUrl('about')} rel="noopener">Termphin</a>, an SSH client whose sessions are never
+    killed. When you lock your phone, switch from Wi-Fi to mobile data or lose the connection, a small helper on the
+    server keeps the shell running and Termphin puts you back where you left off, screen included, without a tmux
+    setup. It also has an SFTP file browser, snippets, port forwarding and jump hosts, keeps keys in an encrypted vault,
+    and is completely free. Unlike this site, the Termphin app is not open source; the helper it uploads to your server
+    and its terminal engine are.
+  </p>
+  <p>
+    sshkeygen.dev stays free and works without Termphin. Questions and corrections:
+    <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> or a <a href={`${GITHUB_URL}/issues`} rel="noopener">GitHub
+    issue</a>.
+  </p>
+</Article>

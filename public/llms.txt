@@ -1,0 +1,30 @@
+# sshkeygen.dev
+
+> Free, open-source (MIT) SSH key generator that runs entirely in the browser. It creates Ed25519, RSA (2048, 3072, 4096) and ECDSA (P-256, P-384, P-521) keys in OpenSSH format, with optional passphrase encryption (aes256-ctr, bcrypt_pbkdf, 16 rounds, the same as ssh-keygen). Keys are never sent over the network; a Content Security Policy forbids all network connections. No cookies, no analytics. Made by the team behind Termphin (https://termphin.dev), an SSH client whose sessions are never killed.
+
+The generator outputs a public key line for authorized_keys, the private key file (-----BEGIN OPENSSH PRIVATE KEY-----), the SHA256 fingerprint and the randomart image, with downloads named id_ed25519 / id_ed25519.pub (or id_rsa, id_ecdsa). A separate tool computes the SHA256 fingerprint of any pasted public key.
+
+## Tool
+
+- [SSH key generator](https://sshkeygen.dev/): generate a key pair in the browser, then follow next steps for macOS, Linux and Windows
+
+## Guides
+
+- [ssh-keygen command reference](https://sshkeygen.dev/ssh-keygen): every common flag with examples
+- [Generate an SSH key on macOS](https://sshkeygen.dev/generate-ssh-key-mac): ssh-keygen, Keychain, ~/.ssh/config
+- [Generate an SSH key on Linux](https://sshkeygen.dev/generate-ssh-key-linux): ssh-keygen, ssh-agent, permissions
+- [Generate an SSH key on Windows](https://sshkeygen.dev/generate-ssh-key-windows): built-in OpenSSH, PowerShell, ssh-agent service
+- [SSH key for GitHub, GitLab and Bitbucket](https://sshkeygen.dev/ssh-key-for-github): add a key, test it, multiple accounts, commit signing
+- [Add an SSH key to a server](https://sshkeygen.dev/add-ssh-key-to-server): authorized_keys, ssh-copy-id, permissions, troubleshooting
+- [Ed25519 vs RSA vs ECDSA](https://sshkeygen.dev/ed25519-vs-rsa): comparison and recommendation
+- [SSH key passphrases](https://sshkeygen.dev/ssh-key-passphrase): why, ssh-agent, ssh-keygen -p
+- [SSH key fingerprints](https://sshkeygen.dev/ssh-key-fingerprint): what they are and how to check them
+- [SSH connection keeps dropping](https://sshkeygen.dev/ssh-connection-keeps-dropping): Broken pipe, keepalives, tmux, mosh
+- [Use an SSH key on your phone](https://sshkeygen.dev/ssh-key-on-phone): generate or move a key safely, import, revoke a lost phone
+- [Run Claude Code or Codex over SSH](https://sshkeygen.dev/ai-coding-agent-over-ssh): a coding agent on a server, checked from a phone
+
+## About
+
+- [About](https://sshkeygen.dev/about): who makes it and how it is built
+- [Privacy](https://sshkeygen.dev/privacy): no tracking, no cookies, no network requests for keys
+- [Source code](https://github.com/Termphin/sshkeygen.dev): MIT license

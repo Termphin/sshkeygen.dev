@@ -1,0 +1,16 @@
+---
+import { termphinUrl } from '../data/site';
+
+interface Props {
+  placement: string;
+  pitch: string;
+}
+
+const { placement, pitch } = Astro.props;
+---
+
+<aside class="tp-box" aria-label="Termphin">
+  <p>
+    {pitch} <a href={termphinUrl(placement)} rel="noopener">Try Termphin&nbsp;&rarr;</a>
+  </p>
+</aside>

@@ -1,0 +1,20 @@
+---
+import Base from '../layouts/Base.astro';
+import { guides } from '../data/site';
+---
+
+<Base
+  title="Page not found - sshkeygen.dev"
+  description="This page does not exist. Generate an SSH key in your browser or browse the guides for macOS, Linux, Windows, GitHub, passphrases and fingerprints."
+  path="/404"
+  noindex
+>
+  <div class="page not-found">
+    <h1>404</h1>
+    <pre><span class="err">cat: page: No such file or directory</span></pre>
+    <p>The link may be old or mistyped. <a href="/">Generate an SSH key</a>, or pick a guide:</p>
+    <ul class="index-list">
+      {guides.map((guide) => <li><a href={guide.href}>{guide.label}</a></li>)}
+    </ul>
+  </div>
+</Base>

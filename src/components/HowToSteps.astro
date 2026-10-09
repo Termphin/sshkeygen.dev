@@ -1,0 +1,22 @@
+---
+import type { HowToStep } from '../data/howto';
+
+interface Props {
+  steps: HowToStep[];
+}
+
+const { steps } = Astro.props;
+---
+
+<ol class="steps">
+  {
+    steps.map((step, index) => (
+      <li id={`step-${index + 1}`}>
+        <h3>{step.name}</h3>
+        <p set:html={step.html} />
+        {step.code && <pre><code>{step.code}</code></pre>}
+        {step.after && <p set:html={step.after} />}
+      </li>
+    ))
+  }
+</ol>

@@ -1,0 +1,52 @@
+---
+import Article from '../layouts/Article.astro';
+import { CONTACT_EMAIL, GITHUB_URL } from '../data/site';
+
+const path = '/privacy';
+const title = 'Privacy Policy - sshkeygen.dev';
+const description =
+  'sshkeygen.dev collects nothing: no cookies, no analytics, no tracking and no network requests for your keys. Keys are generated and kept only in your browser.';
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="Privacy"
+  heading="Privacy policy"
+  lead="We collect nothing. Keys are generated in your browser and never leave it."
+  articleType="WebPage"
+  updated="2026-10-08"
+  cta={false}
+>
+  <p>Last updated 8 October 2026.</p>
+
+  <h2 id="keys">Keys and passphrases</h2>
+  <p>
+    Keys, passphrases and any key you paste into the fingerprint checker exist only in your browser tab's memory. They
+    are never transmitted, stored or logged, and they are gone when you close or reload the tab or press clear.
+    Downloads are saved by your browser without involving our server.
+  </p>
+  <p>
+    Every page carries a Content Security Policy with <code>connect-src 'none'</code>, so the page cannot open network
+    connections from script. The source is on <a href={GITHUB_URL} rel="noopener">GitHub</a>.
+  </p>
+
+  <h2 id="analytics">Cookies, analytics and tracking</h2>
+  <p>
+    None. No cookies, no analytics, no ads, no third-party content. Fonts are self-hosted. Links to Termphin carry only
+    campaign tags naming this site and the place on the page.
+  </p>
+
+  <h2 id="hosting">Server logs</h2>
+  <p>
+    The web server receives what every browser sends, such as your IP address, the page requested and your user agent.
+    This may be kept briefly in standard logs for security and operations. It is not used to identify you and never
+    contains keys.
+  </p>
+
+  <h2 id="contact">Changes and contact</h2>
+  <p>
+    Changes are published on this page with a new date. Privacy questions: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+  </p>
+</Article>

@@ -1,0 +1,25 @@
+---
+import { termphinUrl } from '../data/site';
+
+interface Props {
+  placement: string;
+  heading?: string;
+}
+
+const { placement, heading = 'Try Termphin' } = Astro.props;
+---
+
+<aside class="tp-block tp-end" aria-labelledby="tp-end-title">
+  <h2 id="tp-end-title">{heading}</h2>
+  <p>
+    Termphin is an SSH client from the people behind this site. Your session survives a locked phone, a switch from
+    Wi-Fi to mobile data or a dropped connection: a small open-source helper on the server keeps the shell running and
+    puts you back where you left off, screen included. It is completely free.
+  </p>
+  <ul class="tp-points">
+    <li>No tmux setup. The helper is optional, and Termphin works as a plain SSH client too.</li>
+    <li>htop, vim and AI coding agents draw correctly, with a special-keys toolbar you can arrange.</li>
+    <li>SFTP, snippets, port forwarding and jump hosts. Keys are generated or imported and kept in an encrypted vault.</li>
+  </ul>
+  <p class="tp-actions"><a class="tp-btn" href={termphinUrl(placement)} rel="noopener">Get Termphin</a></p>
+</aside>

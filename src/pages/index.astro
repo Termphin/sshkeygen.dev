@@ -1,0 +1,133 @@
+---
+import '../styles/tool.css';
+import Base from '../layouts/Base.astro';
+import Generator from '../components/Generator.svelte';
+import Faq from '../components/Faq.astro';
+import TermphinHero from '../components/TermphinHero.astro';
+import { CONTACT_EMAIL, GITHUB_URL, SITE_NAME, SITE_URL, TERMPHIN_ORGANIZATION, guides } from '../data/site';
+import { faqSchema } from '../data/howto';
+
+const title = 'SSH Key Generator - Ed25519 and RSA, in Your Browser';
+const description =
+  'Generate Ed25519, RSA and ECDSA SSH keys in your browser. Free, open source and private: keys never leave your device. OpenSSH format with passphrase support.';
+
+const faq: { q: string; a: string }[] = [
+  {
+    q: 'Is it safe to generate an SSH key in a browser?',
+    a: 'Yes, when the page never sends the key anywhere. Keys come from the Web Crypto API on your device, and a Content Security Policy forbids this page from opening any network connection. For keys that guard critical systems, run <a href="/ssh-keygen">ssh-keygen</a> locally.',
+  },
+  {
+    q: 'Are the keys stored or sent anywhere?',
+    a: 'No. They live only in this tab\'s memory until you close it or press Start over. There are no cookies, no analytics and no backend.',
+  },
+  {
+    q: 'Which key type should I choose?',
+    a: 'Ed25519. Use RSA 4096 only for old systems that reject Ed25519, and ECDSA when a policy demands NIST curves. See <a href="/ed25519-vs-rsa">Ed25519 vs RSA</a>.',
+  },
+  {
+    q: 'Are the keys compatible with OpenSSH?',
+    a: 'Yes. The private key uses the OpenSSH format and, with a passphrase, aes256-ctr and bcrypt_pbkdf at 16 rounds, exactly like ssh-keygen. The public key is a standard <code>authorized_keys</code> line.',
+  },
+  {
+    q: 'Should I set a passphrase?',
+    a: 'Yes, for any key on a laptop or phone. A stolen file is useless without it, and ssh-agent means you type it once per session. See <a href="/ssh-key-passphrase">passphrases</a>.',
+  },
+  {
+    q: 'Does it work offline?',
+    a: 'Yes. Once the page has loaded, generation needs no network at all.',
+  },
+];
+
+const jsonLd: Record<string, unknown>[] = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: 'sshkeygen.dev SSH Key Generator',
+    url: `${SITE_URL}/`,
+    description,
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Any',
+    browserRequirements: 'Requires JavaScript and the Web Crypto API.',
+    isAccessibleForFree: true,
+    license: 'https://opensource.org/licenses/MIT',
+    image: `${SITE_URL}/og-image.png`,
+    featureList: [
+      'Ed25519, RSA (2048, 3072, 4096) and ECDSA (P-256, P-384, P-521) keys',
+      'OpenSSH private key format with optional passphrase encryption',
+      'SHA256 fingerprint and randomart',
+      'Runs entirely in the browser, works offline',
+    ],
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    creator: { '@id': TERMPHIN_ORGANIZATION['@id'] },
+    publisher: { '@id': TERMPHIN_ORGANIZATION['@id'] },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: SITE_NAME,
+    url: `${SITE_URL}/`,
+    inLanguage: 'en',
+    creator: { '@id': TERMPHIN_ORGANIZATION['@id'] },
+    publisher: { '@id': TERMPHIN_ORGANIZATION['@id'] },
+  },
+  {
+    '@context': 'https://schema.org',
+    ...TERMPHIN_ORGANIZATION,
+    logo: `${SITE_URL}/icon-512.png`,
+    email: CONTACT_EMAIL,
+    sameAs: ['https://github.com/Termphin'],
+  },
+  faqSchema(faq),
+];
+---
+
+<Base title={title} description={description} path="/" jsonLd={jsonLd}>
+  <div class="page home-head">
+    <h1>SSH key generator</h1>
+    <p class="lead">Create an SSH key pair for GitHub, GitLab or your servers - free, private, right in your browser.</p>
+    <TermphinHero variant="strip" />
+    <div class="hero">
+      <div class="hero-main">
+        <Generator client:load />
+      </div>
+      <TermphinHero variant="panel" />
+    </div>
+
+    <section class="block" aria-labelledby="what-title">
+      <h2 id="what-title">What is an SSH key?</h2>
+      <div class="prose">
+        <p>
+          An SSH key lets you log in to GitHub, GitLab or a server without typing a password every time. It comes as two
+          files that belong together. The public key is like a lock: you hand it to every service you want to reach. The
+          private key is the only key that opens that lock, so it stays on your computer and you never share it.
+        </p>
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="why-title">
+      <h2 id="why-title">Why this one</h2>
+      <ul class="facts">
+        <li><b>in your browser</b> - keys never leave the tab, and the page is not allowed to send anything over the network.</li>
+        <li><b>works everywhere</b> - the same standard OpenSSH files that macOS, Linux and Windows create, checked against them in tests.</li>
+        <li><b>open source</b> - MIT licensed, <a href={GITHUB_URL} rel="noopener">source on GitHub</a>.</li>
+      </ul>
+    </section>
+
+    <section class="block" id="guides" aria-labelledby="guides-title">
+      <h2 id="guides-title">Guides</h2>
+      <ul class="index-list">
+        {
+          guides.map((guide) => (
+            <li>
+              <a href={guide.href}>{guide.label}</a> <span>- {guide.summary}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <div class="block">
+      <Faq items={faq} />
+    </div>
+  </div>
+</Base>

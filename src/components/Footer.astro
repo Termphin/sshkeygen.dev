@@ -1,0 +1,19 @@
+---
+import { CONTACT_EMAIL, GITHUB_URL, termphinUrl } from '../data/site';
+
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer">
+  <div class="page">
+    <p class="footer-termphin">
+      Made by <a href={termphinUrl('footer')} rel="noopener">Termphin</a> - an SSH client whose sessions are never killed.
+    </p>
+    <p>
+      sshkeygen.dev is open source under the <a href={`${GITHUB_URL}/blob/main/LICENSE`} rel="noopener">MIT license</a>.
+      <a href={GITHUB_URL} rel="noopener">Source</a> · <a href="/about">About</a> · <a href="/privacy">Privacy</a> ·
+      <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+    </p>
+    <p>&copy; {year} Termphin.</p>
+  </div>
+</footer>

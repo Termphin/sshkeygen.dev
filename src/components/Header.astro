@@ -1,0 +1,20 @@
+---
+import { GITHUB_URL, termphinUrl } from '../data/site';
+
+interface Props {
+  path: string;
+}
+
+const { path } = Astro.props;
+---
+
+<header class="site-header">
+  <div class="page">
+    <a class="brand" href="/" aria-current={path === '/' ? 'page' : undefined}><span class="ps1" aria-hidden="true">$ </span>sshkeygen.dev</a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="/#guides">Guides</a>
+      <a href={GITHUB_URL} rel="noopener">GitHub</a>
+      <a class="nav-termphin" href={termphinUrl('header')} rel="noopener">Termphin</a>
+    </nav>
+  </div>
+</header>
