@@ -1,0 +1,326 @@
+---
+import Article from '../layouts/Article.astro';
+import Faq from '../components/Faq.astro';
+import { faqSchema } from '../data/howto';
+
+const path = '/ssh-key-passphrase';
+const title = 'SSH Key Passphrase: Why, ssh-agent and ssh-keygen -p';
+const description =
+  'Why an SSH key passphrase matters, how OpenSSH encrypts the key, how ssh-agent saves you retyping it, and how to add, change or remove one with ssh-keygen -p.';
+
+const toc = [
+  { id: 'why', label: 'Why a passphrase matters' },
+  { id: 'threats', label: 'What it protects against, and what not' },
+  { id: 'how', label: 'How OpenSSH encrypts the key' },
+  { id: 'kdf-rounds', label: 'KDF rounds: ssh-keygen -a' },
+  { id: 'choosing', label: 'Choosing a good passphrase' },
+  { id: 'agent', label: 'ssh-agent: type it once' },
+  { id: 'timeouts', label: 'Agent timeouts and confirmation' },
+  { id: 'change', label: 'Add, change or remove a passphrase' },
+  { id: 'check', label: 'Check whether a key has a passphrase' },
+  { id: 'forgotten', label: 'Forgot the passphrase?' },
+  { id: 'automation', label: 'Keys without a passphrase for automation' },
+  { id: 'troubleshooting', label: 'Troubleshooting' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const faq = [
+  {
+    q: 'I forgot my SSH key passphrase. Can I recover it?',
+    a: 'No. The passphrase is the only way to decrypt the key, and that is the point. Generate a new key, install its public half wherever the old one was, and remove the old public key from those places.',
+  },
+  {
+    q: 'Does changing the passphrase change the key?',
+    a: 'No. ssh-keygen -p re-encrypts the same key under a new passphrase. The public key and its fingerprint stay identical, so nothing needs updating on servers or GitHub.',
+  },
+  {
+    q: 'Is a key without a passphrase ever acceptable?',
+    a: 'For automation such as CI jobs, backups or deploy hooks, yes, because nobody is there to type it. Limit the damage instead: one key per job, a deploy key with read-only access, or command= and from= restrictions in authorized_keys.',
+  },
+  {
+    q: 'How do I check whether a key has a passphrase?',
+    a: 'Run ssh-keygen -y -P "" -f ~/.ssh/id_ed25519. If it prints the public key, the file is not encrypted. If it complains about an incorrect passphrase, it is.',
+  },
+  {
+    q: 'Is the passphrase sent to the server?',
+    a: 'No. It never leaves your computer. It only decrypts the private key file locally; the server sees a signature made with the key and nothing else.',
+  },
+  {
+    q: 'What is the minimum passphrase length?',
+    a: 'ssh-keygen refuses passphrases shorter than five characters, with "passphrase is too short (minimum five characters)". That is a floor, not a recommendation: aim for several random words.',
+  },
+  {
+    q: 'Does a passphrase slow down every SSH connection?',
+    a: 'Only when the key is decrypted, which takes a fraction of a second with the default settings. With ssh-agent that happens once per session, and connections after that are as fast as with an unencrypted key.',
+  },
+];
+
+const schema = [faqSchema(faq)];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="SSH key passphrase"
+  heading="SSH key passphrases: why you want one and how to live with it"
+  lead="A passphrase encrypts your private key file, so a copy of it is useless on its own. With ssh-agent you type it once per session."
+  updated="2026-10-09"
+  schema={schema}
+  termphinPitch="Termphin stores imported keys in an encrypted vault and reads passphrase-protected OpenSSH keys, so the key you just protected works in an SSH client on your phone too."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> Set a passphrase when ssh-keygen asks for one, or add it later with
+      <code>ssh-keygen -p</code>. Load the key into ssh-agent so you type it once per session. A forgotten passphrase
+      cannot be recovered; make a new key.
+    </p>
+    <pre><code>{`ssh-keygen -p -f ~/.ssh/id_ed25519
+ssh-add ~/.ssh/id_ed25519`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="why">Why a passphrase matters</h2>
+  <p>
+    Without a passphrase, the file is the credential. Anyone with a copy, from a stolen laptop, a backup or a malicious
+    dependency that reads <code>~/.ssh</code>, can log in to every server that trusts it.
+  </p>
+  <p>
+    With one, an attacker must crack the passphrase offline first, which a good passphrase and OpenSSH's slow key
+    derivation make impractical. That gives you time to notice and remove the public key from your servers and
+    accounts.
+  </p>
+  <p>
+    The passphrase is not a password for the server. It never leaves your computer and the server cannot tell whether
+    your key has one. It only decides whether the private key file is stored in plain form or encrypted.
+  </p>
+
+  <h2 id="threats">What it protects against, and what not</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Situation</th><th>Does a passphrase help?</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Laptop stolen or lost, disk not encrypted</td><td>Yes. The thief has an encrypted file.</td></tr>
+        <tr><td>Key file copied from a backup, sync folder or old disk</td><td>Yes.</td></tr>
+        <tr><td>A malicious package or script reads <code>~/.ssh</code> and uploads it</td><td>Yes, if the passphrase is strong enough to resist offline guessing.</td></tr>
+        <tr><td>Malware running as you while the key is unlocked in the agent</td><td>No. It can ask the agent to sign for it.</td></tr>
+        <tr><td>Keylogger on your machine</td><td>No. It captures the passphrase as you type.</td></tr>
+        <tr><td>Someone using your unlocked, logged-in computer</td><td>No, while the agent holds the key.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <p>
+      A passphrase protects the key <strong>at rest</strong>. It does not help if malware runs as you while the key is
+      unlocked in the agent. For that threat, a hardware-backed <code>ed25519-sk</code> key that needs a physical touch
+      is the next step.
+    </p>
+  </div>
+
+  <h2 id="how">How OpenSSH encrypts the key</h2>
+  <p>
+    Keys written by any current <code>ssh-keygen</code> use the <code>openssh-key-v1</code> format. When you set a
+    passphrase, OpenSSH:
+  </p>
+  <ol>
+    <li>draws a random 16-byte salt;</li>
+    <li>
+      runs <strong>bcrypt_pbkdf</strong> over the passphrase and salt, 16 rounds by default, to derive a key and an IV;
+    </li>
+    <li>encrypts the private section of the file with <strong>aes256-ctr</strong>.</li>
+  </ol>
+  <p>
+    The public key and the comment stay readable, which is why <code>ssh-keygen -l</code> can show the fingerprint of an
+    encrypted key without asking for the passphrase. The file always begins with
+    <code>-----BEGIN OPENSSH PRIVATE KEY-----</code>, encrypted or not.
+  </p>
+  <p>
+    The <a href="/">sshkeygen.dev generator</a> uses the same format, cipher and 16 rounds, so a key generated in your
+    browser behaves exactly like one from ssh-keygen.
+  </p>
+
+  <h2 id="kdf-rounds">KDF rounds: ssh-keygen -a</h2>
+  <p>
+    bcrypt is slow on purpose. Each guess an attacker makes costs the same work as each unlock you do. Raise the cost
+    with <code>-a</code>, when creating a key or with <code>-p</code> on an existing one:
+  </p>
+  <pre><code>{`ssh-keygen -t ed25519 -a 100 -C "you@example.com"
+ssh-keygen -p -a 100 -f ~/.ssh/id_ed25519`}</code></pre>
+  <p>
+    The cost grows linearly with the rounds. On a current desktop, decrypting a key took about 0.12 seconds at the
+    default 16 rounds and about 0.5 seconds at 100. With an agent you pay that once per session, so 64 to 100 rounds is a
+    painless upgrade. Rounds do not rescue a weak passphrase, though; they multiply the attacker's cost by a constant.
+  </p>
+
+  <h2 id="choosing">Choosing a good passphrase</h2>
+  <p>
+    Length beats complexity. Four to six random words, such as <code>pelican-oxygen-marble-sofa-cobalt</code>, are
+    easy to type and hard to guess. Pick them with a password manager or dice, and store the passphrase there: it
+    cannot be recovered.
+  </p>
+  <ul>
+    <li>Do not reuse your login, email or Wi-Fi password. A leak of one should not unlock the others.</li>
+    <li>Do not build it from facts about you, song lyrics or quotes; attackers try those first.</li>
+    <li>ssh-keygen rejects anything shorter than five characters. Aim for at least 20.</li>
+  </ul>
+
+  <h2 id="agent">ssh-agent: type it once</h2>
+  <p>
+    ssh-agent holds decrypted keys in memory. The file stays encrypted and you type the passphrase once per session.
+  </p>
+  <pre><code>{`eval "$(ssh-agent -s)"            # start an agent if none is running
+ssh-add ~/.ssh/id_ed25519        # unlock and add the key
+ssh-add -l                       # list loaded keys
+ssh-add -t 4h ~/.ssh/id_ed25519  # add with a four-hour lifetime
+ssh-add -d ~/.ssh/id_ed25519     # remove one key
+ssh-add -D                       # remove all keys`}</code></pre>
+  <p>Adding a key looks like this:</p>
+  <pre><code>{`$ ssh-add ~/.ssh/id_ed25519
+Enter passphrase for /home/you/.ssh/id_ed25519:
+Identity added: /home/you/.ssh/id_ed25519 (you@example.com)`}</code></pre>
+  <p>
+    To have keys added on first use, put <code>AddKeysToAgent yes</code> in <code>~/.ssh/config</code>. Each platform
+    also has a way to keep the passphrase across reboots:
+  </p>
+  <ul>
+    <li>
+      <strong>macOS:</strong> <code>ssh-add --apple-use-keychain ~/.ssh/id_ed25519</code> plus
+      <code>UseKeychain yes</code> in the config stores it in the Keychain. See the
+      <a href="/generate-ssh-key-mac">macOS guide</a>.
+    </li>
+    <li>
+      <strong>Windows:</strong> the ssh-agent service keeps added keys, protected by your Windows account, until you
+      remove them. See the <a href="/generate-ssh-key-windows">Windows guide</a>.
+    </li>
+    <li>
+      <strong>Linux desktops:</strong> GNOME Keyring and KDE Wallet can unlock keys at login. On servers and minimal
+      systems, use <code>ssh-agent</code> per session. See the <a href="/generate-ssh-key-linux">Linux guide</a>.
+    </li>
+  </ul>
+  <div class="note warn">
+    <p>
+      Be careful with agent forwarding (<code>ssh -A</code> or <code>ForwardAgent yes</code>). Anyone with root on the
+      remote host can use your forwarded agent to log in elsewhere as you while you are connected. Prefer
+      <code>ProxyJump</code> (<code>ssh -J</code>) to reach hosts behind a bastion.
+    </p>
+  </div>
+
+  <h2 id="timeouts">Agent timeouts and confirmation</h2>
+  <p>
+    An unlocked key in the agent is the weak spot from the table above. Three options shrink it:
+  </p>
+  <ul>
+    <li>
+      <strong>A lifetime per key.</strong> <code>ssh-add -t 1h</code> removes the key after an hour. In
+      <code>~/.ssh/config</code>, <code>AddKeysToAgent 1h</code> does the same for keys added on first use.
+    </li>
+    <li>
+      <strong>A default lifetime for the agent.</strong> <code>ssh-agent -t 8h</code> applies to every key added without
+      its own <code>-t</code>.
+    </li>
+    <li>
+      <strong>Confirm each use.</strong> <code>ssh-add -c</code> makes the agent ask for confirmation every time the key
+      signs, through an askpass dialog. Software that tries to use the key behind your back shows up immediately. It needs
+      a graphical askpass program, so it suits desktops.
+    </li>
+  </ul>
+  <p>
+    <code>ssh-add -x</code> locks the agent with a password until <code>ssh-add -X</code> unlocks it, which is useful
+    before leaving a session running.
+  </p>
+
+  <h2 id="change">Add, change or remove a passphrase</h2>
+  <p>
+    <code>ssh-keygen -p</code> re-encrypts an existing key. The key itself, its public half and its
+    <a href="/ssh-key-fingerprint">fingerprint</a> do not change, so nothing on your servers needs updating.
+  </p>
+  <pre><code>{`$ ssh-keygen -p -f ~/.ssh/id_ed25519
+Enter old passphrase:
+Key has comment 'you@example.com'
+Enter new passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved with the new passphrase.`}</code></pre>
+  <p>
+    It asks for the old passphrase (only if there is one), then the new one twice. An empty new passphrase removes it.
+    For scripts (both end up in your shell history):
+  </p>
+  <pre><code>{`ssh-keygen -p -f ~/.ssh/id_ed25519 -P "old passphrase" -N "new passphrase"`}</code></pre>
+  <p>
+    On a legacy PEM key (<code>-----BEGIN RSA PRIVATE KEY-----</code>), <code>-p</code> also rewrites it in the stronger
+    <code>openssh-key-v1</code> format. Old PEM keys use a single MD5 pass, which is easy to brute-force.
+  </p>
+  <p>
+    A key already loaded in the agent stays loaded with no change. Copies of the key elsewhere, such as in a backup, keep
+    the old passphrase.
+  </p>
+
+  <h2 id="check">Check whether a key has a passphrase</h2>
+  <pre><code>{`$ ssh-keygen -y -P "" -f ~/.ssh/id_ed25519
+Load key "/home/you/.ssh/id_ed25519": incorrect passphrase supplied to decrypt private key`}</code></pre>
+  <p>
+    That answer means the key is encrypted. An unencrypted key prints its public key line instead. Legacy PEM files show it
+    in the header: <code>Proc-Type: 4,ENCRYPTED</code> means a passphrase is set.
+  </p>
+
+  <h2 id="forgotten">Forgot the passphrase?</h2>
+  <p>
+    There is no reset. If the key is still loaded in a running agent you can keep using it for now, but you cannot export
+    it from there. Plan the replacement while you still have access:
+  </p>
+  <ol>
+    <li>Generate a new key with <code>ssh-keygen -t ed25519</code> and a passphrase you store in a password manager.</li>
+    <li>Install the new public key on every server and git host (<a href="/add-ssh-key-to-server">servers</a>, <a href="/ssh-key-for-github">GitHub and others</a>).</li>
+    <li>Remove the old public key from those places and delete the old files.</li>
+  </ol>
+  <p>
+    Trying to brute-force your own passphrase is only realistic if you remember most of it, and even then it is slow by
+    design.
+  </p>
+
+  <h2 id="automation">Keys without a passphrase for automation</h2>
+  <p>
+    Cron jobs, CI pipelines and backup scripts cannot type a passphrase. Give them their own key with an empty
+    passphrase and make that key worth little to an attacker:
+  </p>
+  <pre><code>{`ssh-keygen -t ed25519 -N "" -f ~/.ssh/backup_key -C "backup@db-01"`}</code></pre>
+  <ul>
+    <li>One key per job and per machine, so one leak does not expose the rest.</li>
+    <li>On the server, restrict it in <code>authorized_keys</code> with <code>restrict</code>, <code>command=</code> and <code>from=</code>.</li>
+    <li>On git hosts, use a read-only deploy key for a single repository.</li>
+    <li>Store CI keys in the platform's secret store, never in the repository.</li>
+  </ul>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <h3>ssh asks "Enter passphrase for key" on every connection</h3>
+  <p>
+    No agent holds the key. Load it with <code>ssh-add</code>, or add <code>AddKeysToAgent yes</code> to
+    <code>~/.ssh/config</code>. If <code>ssh-add</code> answers "Could not open a connection to your authentication
+    agent", start one with <code>eval "$(ssh-agent -s)"</code>.
+  </p>
+  <h3>"incorrect passphrase supplied to decrypt private key"</h3>
+  <p>
+    The passphrase is wrong, or the keyboard layout differs from the one you used when setting it. Check Caps Lock and the
+    input language. If you never set a passphrase, the file may belong to someone else or be damaged.
+  </p>
+  <h3>"Load key ... error in libcrypto"</h3>
+  <p>
+    Usually not the passphrase at all: the key file was damaged when copied, most often by Windows line endings or a
+    missing final newline after pasting it into an editor. Copy the file again as a file, not through the clipboard, or
+    make sure it ends with a newline and uses LF line endings.
+  </p>
+  <h3>"sign_and_send_pubkey: signing failed ... agent refused operation"</h3>
+  <p>
+    The agent lists the key but cannot use it, for example because the file it came from changed or, for a hardware key,
+    because the token was not touched. Run <code>ssh-add -D</code> and add the key again.
+  </p>
+
+  <Faq items={faq} />
+</Article>

@@ -1,0 +1,342 @@
+---
+import Article from '../layouts/Article.astro';
+import { faqSchema } from '../data/howto';
+import Faq from '../components/Faq.astro';
+
+const path = '/ed25519-vs-rsa';
+const title = 'Ed25519 vs RSA vs ECDSA: Which SSH Key Type to Use';
+const description =
+  'Ed25519, RSA and ECDSA SSH keys compared: security, key size, speed, compatibility and quantum outlook. Which to pick in 2026, and when RSA still matters.';
+
+const toc = [
+  { id: 'what-it-decides', label: 'What the key type decides' },
+  { id: 'at-a-glance', label: 'At a glance' },
+  { id: 'ed25519', label: 'Ed25519: the modern default' },
+  { id: 'rsa', label: 'RSA: universal, but heavy' },
+  { id: 'ssh-rsa', label: 'ssh-rsa vs rsa-sha2-256 and rsa-sha2-512' },
+  { id: 'ecdsa', label: 'ECDSA: fine, but rarely the best choice' },
+  { id: 'dsa', label: 'DSA: do not use' },
+  { id: 'speed', label: 'Speed in numbers' },
+  { id: 'compatibility', label: 'Compatibility: what supports Ed25519' },
+  { id: 'fips', label: 'FIPS and compliance' },
+  { id: 'hardware', label: 'Hardware keys: ed25519-sk and ecdsa-sk' },
+  { id: 'quantum', label: 'What about quantum computers?' },
+  { id: 'switching', label: 'Check your key type and switch' },
+  { id: 'recommendation', label: 'Recommendation' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const faq = [
+  {
+    q: 'Is Ed25519 more secure than RSA 4096?',
+    a: 'Both are far beyond what anyone can break today. Ed25519 targets about 128 bits of security; RSA 4096 is estimated at around 140. The practical difference is not strength but robustness: Ed25519 has fewer ways to be implemented or used wrongly, and it is much faster.',
+  },
+  {
+    q: 'Should I replace my existing RSA key?',
+    a: 'If it is at least 2048 bits, it is not urgent. RSA keys still work with every current server through the rsa-sha2-256 and rsa-sha2-512 signature algorithms. Rotate to Ed25519 the next time you set up a machine, and replace anything below 2048 bits or any DSA key now.',
+  },
+  {
+    q: 'Why does OpenSSH say ssh-rsa is disabled if my RSA key works?',
+    a: 'ssh-rsa names two things: the key type and the old signature algorithm that hashes with SHA-1. OpenSSH 8.8 disabled the SHA-1 signature algorithm by default, not RSA keys. The same key signs with SHA-256 or SHA-512 instead, as long as the server runs OpenSSH 7.2 or newer.',
+  },
+  {
+    q: 'What about the -sk key types?',
+    a: 'ed25519-sk and ecdsa-sk keys live on a FIDO2 security key such as a YubiKey. The private key never touches your disk and each use needs a touch. They require OpenSSH 8.2 or later on both ends. Create one with ssh-keygen -t ed25519-sk.',
+  },
+  {
+    q: 'Is RSA 2048 still safe?',
+    a: 'Yes for now. It is rated at about 112 bits of security, which NIST accepts until 2030. For a new RSA key, use 3072 bits, the ssh-keygen default, or 4096.',
+  },
+  {
+    q: 'Can I have an Ed25519 and an RSA key at the same time?',
+    a: 'Yes. They use different default file names, <code>id_ed25519</code> and <code>id_rsa</code>, and ssh tries both. Use <code>IdentityFile</code> in <code>~/.ssh/config</code> to pin the RSA key to the old hosts that need it.',
+  },
+  {
+    q: 'Can I convert an RSA key to Ed25519?',
+    a: 'No. They are different kinds of keys, so you generate a new Ed25519 key and install its public key wherever the RSA key was trusted.',
+  },
+];
+
+const schema = [faqSchema(faq)];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="Ed25519 vs RSA"
+  heading="Ed25519 vs RSA vs ECDSA: which SSH key should you use?"
+  lead="Short answer: Ed25519. It is fast, small, hard to misuse and supported by everything you are likely to connect to. RSA 4096 is for old systems that refuse it."
+  updated="2026-10-09"
+  schema={schema}
+  termphinPitch="Whichever type you pick, Termphin, an SSH client, can generate the key for you or import an existing OpenSSH one, passphrase-protected included, and keeps it in an encrypted vault."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> Use Ed25519 for every new key. Create an RSA key of 3072 or 4096 bits only for a
+      device or service that does not accept Ed25519. Do not use DSA.
+    </p>
+    <pre><code>{`ssh-keygen -t ed25519 -C "you@example.com"
+ssh-keygen -t rsa -b 4096 -C "you@example.com"`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="what-it-decides">What the key type decides</h2>
+  <p>
+    The <code>-t</code> option of ssh-keygen chooses the signature algorithm your key uses to prove who you are. That is
+    all it controls. The encryption of the session itself is negotiated separately by client and server, with its own
+    key exchange and cipher, whatever your key type.
+  </p>
+  <p>Three things follow from the choice:</p>
+  <ul>
+    <li><strong>Security margin</strong>: how much work it would take to forge your signatures.</li>
+    <li><strong>Size and speed</strong>: how long the public key is, how fast it signs, and how fast it is to generate.</li>
+    <li><strong>Compatibility</strong>: whether the server, appliance or library on the other end understands it.</li>
+  </ul>
+  <p>
+    Servers have keys of their own too, the host keys in <code>/etc/ssh</code>. The same comparison applies to them, but
+    you rarely choose those by hand; sshd generates one of each type at install time.
+  </p>
+
+  <h2 id="at-a-glance">At a glance</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th></th><th>Ed25519</th><th>RSA 4096</th><th>RSA 3072</th><th>RSA 2048</th><th>ECDSA P-256</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Security level</td><td>~128 bits</td><td>~140 bits</td><td>~128 bits</td><td>~112 bits</td><td>~128 bits</td></tr>
+        <tr><td>Public key (base64)</td><td>68 chars</td><td>716 chars</td><td>544 chars</td><td>372 chars</td><td>140 chars</td></tr>
+        <tr><td>Signature size</td><td>64 bytes</td><td>512 bytes</td><td>384 bytes</td><td>256 bytes</td><td>~72 bytes</td></tr>
+        <tr><td>Key generation</td><td>Instant</td><td>Up to seconds</td><td>Under a second</td><td>Under a second</td><td>Instant</td></tr>
+        <tr><td>Signing speed</td><td>Very fast</td><td>Slow</td><td>Moderate</td><td>Moderate</td><td>Fast</td></tr>
+        <tr><td>Needs randomness to sign</td><td>No (deterministic)</td><td>No</td><td>No</td><td>No</td><td>Yes, a fresh nonce each time</td></tr>
+        <tr><td>OpenSSH support since</td><td>6.5 (2014)</td><td>Always</td><td>Always</td><td>Always</td><td>5.7 (2011)</td></tr>
+        <tr><td>GitHub, GitLab, Bitbucket</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Recommended for new keys</td><td><strong>Yes</strong></td><td>When needed</td><td>When needed</td><td>No</td><td>Only by policy</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Security levels are the usual estimates (NIST SP 800-57 for RSA): the approximate number of operations, as a power of
+    two, needed to break the key with the best known classical attack. Anything at 112 bits or more is out of reach
+    today.
+  </p>
+
+  <h2 id="ed25519">Ed25519: the modern default</h2>
+  <p>
+    EdDSA over Curve25519, designed in 2011 to be fast and hard to get wrong. OpenSSH added it in 6.5 and recommends
+    it for new keys; since OpenSSH 9.5, ssh-keygen creates an Ed25519 key when you give no <code>-t</code> at all.
+  </p>
+  <ul>
+    <li>
+      <strong>Deterministic signatures.</strong> The per-signature value that ECDSA must draw at random is derived from
+      the key and the message instead. A bad random number generator at signing time cannot leak the key.
+    </li>
+    <li>
+      <strong>Built for constant time.</strong> The curve arithmetic has no secret-dependent branches, which shuts out
+      the timing side channels that have hit RSA and ECDSA implementations.
+    </li>
+    <li>
+      <strong>No parameters to choose.</strong> There is one curve and one key size, so there is no
+      <code>-b</code> to get wrong.
+    </li>
+    <li>
+      <strong>Short keys.</strong> The whole public key fits on one line of a terminal, which makes it easy to paste,
+      compare and audit in <code>authorized_keys</code>.
+    </li>
+  </ul>
+  <p>
+    Since FIPS 186-5 (2023), EdDSA is also approved for US federal systems.
+  </p>
+
+  <h2 id="rsa">RSA: universal, but heavy</h2>
+  <p>
+    Everything supports RSA. Its keys must be big: 2048 bits is the minimum, 3072 the ssh-keygen default, 4096 adds
+    margin at the cost of speed. Recent OpenSSH releases refuse RSA keys shorter than 1024 bits outright, and many
+    services require 2048.
+  </p>
+  <p>Choose RSA, at 3072 or 4096 bits, when you must connect to:</p>
+  <ul>
+    <li>servers running OpenSSH older than 6.5, such as long-unpatched enterprise distributions;</li>
+    <li>network appliances, routers, older NAS boxes and embedded devices whose SSH stack lacks Ed25519;</li>
+    <li>software or hardware tokens, cloud consoles or compliance tools that only accept RSA.</li>
+  </ul>
+  <p>
+    Going beyond 4096 bits buys little: signing gets much slower and some software rejects larger keys, while the
+    attack that would break RSA 4096 in practice, a large quantum computer, would break any RSA size.
+  </p>
+
+  <h2 id="ssh-rsa">ssh-rsa vs rsa-sha2-256 and rsa-sha2-512</h2>
+  <p>
+    One common confusion: OpenSSH 8.8 disabled the <code>ssh-rsa</code> <em>signature algorithm</em>, which uses
+    SHA-1. RSA <em>keys</em> are not deprecated. They keep working by signing with <code>rsa-sha2-256</code> or
+    <code>rsa-sha2-512</code>, which every server since OpenSSH 7.2 (2016) understands.
+  </p>
+  <p>
+    The public key line still starts with <code>ssh-rsa</code>, because that is the name of the key format. Only the way
+    signatures are hashed changed. Problems appear only when one side is old:
+  </p>
+  <ul>
+    <li>
+      <strong>An old server</strong> that only knows SHA-1 signatures rejects your RSA key with
+      <code>Permission denied (publickey)</code>, or offers only an SHA-1 host key, which current clients reject with
+      <code>no matching host key type found. Their offer: ssh-rsa</code>.
+    </li>
+    <li>
+      <strong>An old client</strong>, such as an outdated library in a deployment tool, cannot log in to a current server
+      with an RSA key, and the server logs that the key type is not in <code>PubkeyAcceptedAlgorithms</code>.
+    </li>
+  </ul>
+  <p>
+    The right fix is to update the old side or use an Ed25519 key. As a stopgap, allow SHA-1 for that one host only, in
+    your client's <code>~/.ssh/config</code>:
+  </p>
+  <pre><code>{`Host legacy-box
+  HostName 192.0.2.10
+  HostKeyAlgorithms +ssh-rsa
+  PubkeyAcceptedAlgorithms +ssh-rsa`}</code></pre>
+
+  <h2 id="ecdsa">ECDSA: fine, but rarely the best choice</h2>
+  <p>
+    ECDSA uses the NIST curves P-256, P-384 or P-521. Its weak point is the random nonce each signature needs: a
+    reused or predictable nonce leaks the private key, as with the PlayStation 3 signing key in 2010. Ed25519 removes
+    that risk by design.
+  </p>
+  <p>
+    Pick ECDSA when a policy requires NIST curves, or when your smart card or TPM supports only those. Choose the size
+    with <code>-b 256</code>, <code>384</code> or <code>521</code>; 256 is the default and usually enough.
+  </p>
+
+  <h2 id="dsa">DSA: do not use</h2>
+  <p>
+    DSA keys are limited to 1024 bits and share ECDSA's nonce weakness. OpenSSH disabled them by default in version 7.0
+    and removed DSA support entirely in version 10.0. Replace any <code>id_dsa</code> you still have.
+  </p>
+
+  <h2 id="speed">Speed in numbers</h2>
+  <p>
+    A single measurement with <code>openssl speed</code> on one core of a current x86-64 desktop (OpenSSL 3.5). Absolute
+    numbers depend on the machine; the ratios are what matter.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Algorithm</th><th>Signatures per second</th><th>Verifications per second</th><th>Key generation</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Ed25519</td><td>~35,000</td><td>~12,000</td><td>microseconds</td></tr>
+        <tr><td>ECDSA P-256</td><td>~66,000</td><td>~21,000</td><td>microseconds</td></tr>
+        <tr><td>RSA 2048</td><td>~2,150</td><td>~75,000</td><td>~0.03 s</td></tr>
+        <tr><td>RSA 4096</td><td>~310</td><td>~20,000</td><td>~0.2 to 0.4 s</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Your client signs once per login, so even RSA 4096's 3 milliseconds go unnoticed on a laptop. The difference shows on
+    slow hardware, on hardware tokens, in automation that opens thousands of connections, and when generating keys in a
+    browser, where RSA 4096 can take several seconds because the search for primes is random.
+  </p>
+
+  <h2 id="compatibility">Compatibility: what supports Ed25519</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Software or service</th><th>Ed25519 support</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>OpenSSH (Linux, macOS, BSD)</td><td>Since 6.5, January 2014</td></tr>
+        <tr><td>OpenSSH in Windows 10 and 11</td><td>Every version shipped with Windows</td></tr>
+        <tr><td>PuTTY, WinSCP</td><td>PuTTY since 0.68 (2017), in its own <code>.ppk</code> format</td></tr>
+        <tr><td>Dropbear (routers, embedded Linux)</td><td>Since 2020.79</td></tr>
+        <tr><td>Paramiko (Python)</td><td>Since 2.2</td></tr>
+        <tr><td>GitHub, GitLab, Bitbucket</td><td>Yes</td></tr>
+        <tr><td>AWS EC2, Google Cloud, Hetzner, DigitalOcean</td><td>Yes, for Linux servers</td></tr>
+        <tr><td>Old network gear, firmware SSH stacks, older Java libraries</td><td>Often RSA only; check the documentation</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    If you are not sure about a device, try the Ed25519 key first. A server that does not support it simply refuses it,
+    and ssh moves on to the next key or the password prompt.
+  </p>
+
+  <h2 id="fips">FIPS and compliance</h2>
+  <p>
+    EdDSA became a FIPS-approved signature algorithm with FIPS 186-5 in 2023. What counts in practice is whether the
+    certified crypto module on your systems includes it, and older validated modules do not. Some distributions running
+    in FIPS mode therefore refuse Ed25519 keys. In that case use ECDSA P-256 or P-384, or RSA 3072 or larger, and check
+    your organisation's policy rather than the standard alone.
+  </p>
+
+  <h2 id="hardware">Hardware keys: ed25519-sk and ecdsa-sk</h2>
+  <p>
+    With a FIDO2 security key, ssh-keygen creates a key whose secret half never leaves the device. The file in
+    <code>~/.ssh</code> is only a handle; without the physical token it is useless, and each login needs a touch.
+  </p>
+  <pre><code>{`ssh-keygen -t ed25519-sk -C "yubikey"
+ssh-keygen -t ecdsa-sk -C "older-token"`}</code></pre>
+  <p>
+    Prefer <code>ed25519-sk</code>; some older tokens support only <code>ecdsa-sk</code>. Both need OpenSSH 8.2 or later
+    on the client and the server. Options such as resident keys are covered in the
+    <a href="/ssh-keygen#fido">ssh-keygen reference</a>.
+  </p>
+
+  <h2 id="quantum">What about quantum computers?</h2>
+  <p>
+    None of these key types would survive a large quantum computer, Ed25519 no more than RSA. But:
+  </p>
+  <ul>
+    <li>
+      <strong>Your traffic is already protected.</strong> OpenSSH 9.0 made the hybrid
+      <code>sntrup761x25519-sha512</code> key exchange the default, and OpenSSH 10.0 switched the default to the hybrid
+      <code>mlkem768x25519-sha256</code>. Sessions recorded today cannot be decrypted later, whatever your
+      authentication key type. OpenSSH 10.1 and later warn when a connection falls back to a key exchange without a
+      post-quantum part.
+    </li>
+    <li>
+      <strong>Authentication is not retroactive.</strong> A key only has to resist attack while it is in use. User and
+      host keys in OpenSSH are still classical; when post-quantum signature keys arrive, you will rotate to them, just as
+      you would rotate any key.
+    </li>
+  </ul>
+  <p>
+    Choosing RSA 4096 over Ed25519 "for quantum safety" therefore buys nothing. To see which key exchange a connection
+    used, run <code>ssh -v host 2>&amp;1 | grep "kex: algorithm"</code>.
+  </p>
+
+  <h2 id="switching">Check your key type and switch</h2>
+  <p>List the keys you have and their types:</p>
+  <pre><code>{`$ ssh-keygen -lf ~/.ssh/id_rsa.pub
+3072 SHA256:0XHmc2iPdHK4onDhCP/Ld0QjtAQ0yVtcZpgmN0XbE7s you@laptop (RSA)`}</code></pre>
+  <p>
+    The first number is the size in bits and the type is in brackets. Moving to Ed25519 takes a few minutes:
+  </p>
+  <ol>
+    <li>Generate the new key with <code>ssh-keygen -t ed25519</code>. It gets its own file name, so the RSA key stays.</li>
+    <li>Add the new public key to GitHub and the other git hosts (<a href="/ssh-key-for-github">how</a>) and to each server's <code>authorized_keys</code> (<a href="/add-ssh-key-to-server">how</a>).</li>
+    <li>Log in everywhere with the new key, for example with <code>ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes host</code>.</li>
+    <li>Remove the old public key from those places, then archive or delete the RSA key.</li>
+  </ol>
+
+  <h2 id="recommendation">Recommendation</h2>
+  <ul>
+    <li><strong>New personal or work key:</strong> Ed25519, protected by a <a href="/ssh-key-passphrase">passphrase</a>.</li>
+    <li><strong>Something old refuses it:</strong> an additional RSA 4096 key for that system only.</li>
+    <li><strong>Highest assurance:</strong> <code>ed25519-sk</code> on a FIDO2 hardware key.</li>
+    <li><strong>Existing RSA 2048+ keys:</strong> keep using them, rotate when convenient.</li>
+    <li><strong>DSA or RSA below 2048 bits:</strong> replace now.</li>
+  </ul>
+  <p>Generate either type locally:</p>
+  <pre><code>{`ssh-keygen -t ed25519 -C "you@example.com"
+ssh-keygen -t rsa -b 4096 -C "you@example.com"`}</code></pre>
+  <p>Or in your browser with the <a href="/">sshkeygen.dev generator</a>.</p>
+
+  <Faq items={faq} />
+</Article>

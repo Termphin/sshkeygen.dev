@@ -1,0 +1,378 @@
+---
+import Article from '../layouts/Article.astro';
+import HowToSteps from '../components/HowToSteps.astro';
+import Faq from '../components/Faq.astro';
+import { faqSchema, howToSchema, type HowToStep } from '../data/howto';
+
+const path = '/generate-ssh-key-linux';
+const title = 'How to Generate an SSH Key on Linux (Any Distro)';
+const description =
+  'Create an Ed25519 SSH key on Ubuntu, Debian, Fedora or Arch with ssh-keygen, load it into ssh-agent, set the right permissions and copy it to a server.';
+
+const toc = [
+  { id: 'what-and-why', label: 'What you are creating' },
+  { id: 'steps', label: 'How to generate an SSH key on Linux' },
+  { id: 'output', label: 'What the output means' },
+  { id: 'permissions', label: 'File permissions that ssh expects' },
+  { id: 'agent', label: 'Keep the key unlocked with ssh-agent' },
+  { id: 'copy-public-key', label: 'Copy the public key to the clipboard' },
+  { id: 'install-on-server', label: 'Install the key on a server with ssh-copy-id' },
+  { id: 'multiple-keys', label: 'Use multiple SSH keys with ~/.ssh/config' },
+  { id: 'selinux', label: 'SELinux on Fedora, RHEL, Rocky and Alma' },
+  { id: 'browser-alternative', label: 'Keys from the browser generator' },
+  { id: 'troubleshooting', label: 'Troubleshooting' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const steps: HowToStep[] = [
+  {
+    name: 'Make sure the OpenSSH client is installed',
+    html: 'Almost every desktop and server distribution includes it. Run <code>ssh -V</code>; if the command is missing, install the client package for your distribution:',
+    code: 'sudo apt install openssh-client     # Debian, Ubuntu, Mint\nsudo dnf install openssh-clients    # Fedora, RHEL, Rocky, Alma\nsudo pacman -S openssh              # Arch, Manjaro\nsudo apk add openssh-client         # Alpine',
+  },
+  {
+    name: 'Check for existing keys',
+    html: 'Look in <code>~/.ssh</code>. If <code>id_ed25519</code> is already there, either reuse it or choose a different file name in the next step so you do not overwrite a key that servers already trust.',
+    code: 'ls -al ~/.ssh',
+  },
+  {
+    name: 'Generate an Ed25519 key',
+    html: 'Run ssh-keygen with a comment that identifies the key. Accept the default path with Enter and type a passphrase twice.',
+    code: 'ssh-keygen -t ed25519 -C "you@example.com"',
+    after: 'The private key is saved as <code>~/.ssh/id_ed25519</code>, the public key as <code>~/.ssh/id_ed25519.pub</code>. For a server that predates OpenSSH 6.5, use <code>ssh-keygen -t rsa -b 4096</code>.',
+  },
+  {
+    name: 'Load the key into ssh-agent',
+    html: 'Most desktops (GNOME, KDE) already run an agent; <code>echo $SSH_AUTH_SOCK</code> prints its socket if so. Otherwise start one for this shell, then add the key and type the passphrase once:',
+    code: 'eval "$(ssh-agent -s)"\nssh-add ~/.ssh/id_ed25519',
+  },
+  {
+    name: 'Copy the public key to a server',
+    html: '<code>ssh-copy-id</code> logs in with your password one last time, appends the key to <code>~/.ssh/authorized_keys</code> on the server and sets its permissions:',
+    code: 'ssh-copy-id -i ~/.ssh/id_ed25519.pub user@host',
+    after: 'Then connect with <code>ssh user@host</code>. You should be asked for the key passphrase (or nothing, if the agent has it), not the account password.',
+  },
+];
+
+const faq = [
+  {
+    q: 'Where are SSH keys stored on Linux?',
+    a: 'Your own keys are in <code>~/.ssh</code>, which is <code>/home/your-name/.ssh</code> (or <code>/root/.ssh</code> for root). The server\'s host keys, which identify the machine rather than you, are in <code>/etc/ssh/ssh_host_*_key</code>. Do not touch those when creating a personal key.',
+  },
+  {
+    q: 'Do I run ssh-keygen with sudo?',
+    a: 'No. Run it as the user who will connect. With sudo the key is written to root\'s home, or into yours but owned by root, and ssh then refuses it. If that happened, fix ownership with <code>sudo chown -R "$USER": ~/.ssh</code>.',
+  },
+  {
+    q: 'Is the command the same on Ubuntu, Fedora and Arch?',
+    a: 'Yes. All of them ship upstream OpenSSH, so <code>ssh-keygen -t ed25519</code>, ssh-agent, ssh-add and ssh-copy-id behave the same. Only the package name and the SSH server\'s service name differ.',
+  },
+  {
+    q: 'How do I see my public key?',
+    a: 'Run <code>cat ~/.ssh/id_ed25519.pub</code>. It is one line starting with <code>ssh-ed25519</code>. If the .pub file is lost, rebuild it from the private key with <code>ssh-keygen -y -f ~/.ssh/id_ed25519 &gt; ~/.ssh/id_ed25519.pub</code>.',
+  },
+  {
+    q: 'Can I use the same key on several Linux machines?',
+    a: 'It works, but one key per machine is safer: if a laptop is lost you remove one public key and every other machine keeps working. Copying a key also copies its weaknesses, such as a missing passphrase.',
+  },
+  {
+    q: 'Should I generate a key without a passphrase?',
+    a: 'Only for unattended jobs such as backups or CI, and then restrict what that key may do on the server. For a key you use interactively, set a passphrase and let ssh-agent remember it. See <a href="/ssh-key-passphrase">SSH key passphrases</a>.',
+  },
+  {
+    q: 'What is the difference between ssh-agent and keychain?',
+    a: 'ssh-agent holds unlocked keys in memory for one login session. The <code>keychain</code> utility, packaged by most distributions, starts one agent and reuses it across shells and logins on the same machine, so you type the passphrase once per boot.',
+  },
+];
+
+const schema = [
+  howToSchema({
+    name: 'How to generate an SSH key on Linux',
+    description,
+    path,
+    totalTime: 'PT5M',
+    tools: ['Terminal', 'OpenSSH ssh-keygen'],
+    steps,
+  }),
+  faqSchema(faq),
+];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="Generate an SSH key on Linux"
+  heading="How to generate an SSH key on Linux"
+  lead="The same commands work on Ubuntu, Debian, Fedora, Arch and nearly every other distribution: create an Ed25519 key, load it into ssh-agent and install it on a server."
+  updated="2026-10-09"
+  schema={schema}
+  termphinPitch="Reaching this machine from somewhere other than your desk? Termphin is an SSH client whose sessions survive a locked screen, a network switch or a dropped connection, with no tmux setup."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> Run the first command and press Enter at each prompt, typing a passphrase when asked.
+      The second installs the public key on a server; for GitHub, paste the output of
+      <code>cat ~/.ssh/id_ed25519.pub</code> instead.
+    </p>
+    <pre><code>{`ssh-keygen -t ed25519 -C "you@example.com"
+ssh-copy-id -i ~/.ssh/id_ed25519.pub user@host`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="what-and-why">What you are creating</h2>
+  <p>
+    <code>ssh-keygen</code> creates a key pair: a <strong>private key</strong> that never leaves your machine and a
+    <strong>public key</strong> you install wherever you want to log in. When you connect, the server checks a signature
+    made with the private key against the public key in its <code>authorized_keys</code> file. No secret crosses the
+    network, nothing can be guessed, and once every user has a key the server can stop accepting passwords.
+  </p>
+  <p>
+    The same pair works for git hosting. GitHub, GitLab and Bitbucket accept the public key on your account page, and
+    <code>git push</code> stops asking for tokens.
+  </p>
+  <p>
+    Use the <strong>Ed25519</strong> type. It is the default in current OpenSSH, small, fast and supported by every
+    maintained server. RSA is for old systems that do not know Ed25519; the trade-offs are in
+    <a href="/ed25519-vs-rsa">Ed25519 vs RSA</a>.
+  </p>
+
+  <h2 id="steps">How to generate an SSH key on Linux</h2>
+  <HowToSteps steps={steps} />
+
+  <h2 id="output">What the output means</h2>
+  <p>A full run of step 3 looks like this:</p>
+  <pre><code>{`$ ssh-keygen -t ed25519 -C "you@example.com"
+Generating public/private ed25519 key pair.
+Enter file in which to save the key (/home/you/.ssh/id_ed25519):
+Created directory '/home/you/.ssh'.
+Enter passphrase for "/home/you/.ssh/id_ed25519" (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /home/you/.ssh/id_ed25519
+Your public key has been saved in /home/you/.ssh/id_ed25519.pub
+The key fingerprint is:
+SHA256:I2McFhOvOOgBGIf3aLmk0z7TTKxZoLZ32hK6Bxbk7Tw you@example.com
+The key's randomart image is:
++--[ED25519 256]--+
+|...   +.         |
+|o+.    +         |
+|=..+  o .        |
+| +*o.+ o         |
+| **+o * S        |
+|+=oE+o o .       |
+|oo=Bo            |
+| o*++.           |
+| .+++.           |
++----[SHA256]-----+`}</code></pre>
+  <ul>
+    <li>
+      <strong>Created directory</strong> appears only if <code>~/.ssh</code> did not exist; ssh-keygen creates it with
+      mode <code>700</code>.
+    </li>
+    <li>
+      <strong>The passphrase prompt</strong> reads <code>Enter passphrase (empty for no passphrase):</code> on OpenSSH
+      releases before 10. Typing shows nothing on screen.
+    </li>
+    <li>
+      <strong>The fingerprint</strong> identifies the public key. GitHub and GitLab show the same value next to the key, so
+      you can tell keys apart later (<a href="/ssh-key-fingerprint">more on fingerprints</a>).
+    </li>
+    <li>
+      <strong>The randomart</strong> is a picture of the same fingerprint. You can ignore it.
+    </li>
+  </ul>
+  <p>
+    The public key is one line: <code>ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... you@example.com</code>. The private key
+    file starts with <code>-----BEGIN OPENSSH PRIVATE KEY-----</code> and must never be pasted anywhere.
+  </p>
+
+  <h2 id="permissions">File permissions that ssh expects</h2>
+  <p>
+    If permissions are looser than this, the client refuses the key or the server silently ignores
+    <code>authorized_keys</code>.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Path</th><th>Mode</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>~/.ssh</code></td><td><code>700</code></td><td>Only you may list or add keys.</td></tr>
+        <tr><td><code>~/.ssh/id_ed25519</code></td><td><code>600</code></td><td>The client rejects a private key others can read.</td></tr>
+        <tr><td><code>~/.ssh/id_ed25519.pub</code></td><td><code>644</code></td><td>Public by design.</td></tr>
+        <tr><td><code>~/.ssh/authorized_keys</code></td><td><code>600</code></td><td>sshd's StrictModes ignores a writable file.</td></tr>
+        <tr><td><code>~/.ssh/config</code></td><td><code>600</code></td><td>ssh refuses a config others can write.</td></tr>
+        <tr><td>Your home directory</td><td>not group or world writable</td><td>StrictModes checks every parent folder.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <pre><code>{`chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_ed25519 ~/.ssh/authorized_keys ~/.ssh/config
+chmod 644 ~/.ssh/id_ed25519.pub`}</code></pre>
+  <p>
+    Ownership matters as much as mode: every file in <code>~/.ssh</code> must belong to you. <code>ls -la ~/.ssh</code>
+    shows both.
+  </p>
+
+  <h2 id="agent">Keep the key unlocked with ssh-agent</h2>
+  <p>
+    ssh-agent holds the decrypted key in memory, so you type the passphrase once instead of on every connection. Check
+    whether one is running and what it holds:
+  </p>
+  <pre><code>{`$ ssh-add -l
+256 SHA256:I2McFhOvOOgBGIf3aLmk0z7TTKxZoLZ32hK6Bxbk7Tw you@example.com (ED25519)`}</code></pre>
+  <p>
+    "The agent has no identities." means an agent runs but is empty; "Could not open a connection to your authentication
+    agent." means there is none in this shell.
+  </p>
+  <h3>Add keys automatically on first use</h3>
+  <p>
+    Add this to <code>~/.ssh/config</code> and the key joins the agent the first time you use it:
+  </p>
+  <pre><code>{`Host *
+  AddKeysToAgent yes
+  IdentityFile ~/.ssh/id_ed25519`}</code></pre>
+  <p>
+    <code>ssh-add -l</code> lists the keys the agent holds, <code>ssh-add -t 8h ~/.ssh/id_ed25519</code> adds a key that
+    expires after eight hours, and <code>ssh-add -D</code> forgets them all.
+  </p>
+  <h3>Desktops</h3>
+  <p>
+    GNOME (through GNOME Keyring or gcr-ssh-agent, depending on the release) and most KDE Plasma setups start an agent
+    with your session. They may offer to remember the passphrase in the desktop keyring, which unlocks at login.
+  </p>
+  <h3>Servers, WSL and minimal systems</h3>
+  <p>
+    Without a desktop, nothing starts an agent. The <code>keychain</code> utility, packaged by most distributions, starts
+    one agent and shares it between all your shells. Add this line to <code>~/.bashrc</code> or <code>~/.zshrc</code>:
+  </p>
+  <pre><code>{`eval "$(keychain --eval --quiet id_ed25519)"`}</code></pre>
+  <p>
+    It asks for the passphrase in the first shell after a reboot and reuses the agent after that.
+  </p>
+
+  <h2 id="copy-public-key">Copy the public key to the clipboard</h2>
+  <p>For GitHub, GitLab or a web control panel you need the public key on the clipboard:</p>
+  <pre><code>{`cat ~/.ssh/id_ed25519.pub                          # print it and select it
+wl-copy < ~/.ssh/id_ed25519.pub                    # Wayland (wl-clipboard)
+xclip -selection clipboard < ~/.ssh/id_ed25519.pub # X11 (xclip)`}</code></pre>
+  <p>
+    Copy the whole line starting with <code>ssh-ed25519</code>, never the file without <code>.pub</code>. Where to paste
+    it on each git host is covered in <a href="/ssh-key-for-github">SSH key for GitHub, GitLab and Bitbucket</a>.
+  </p>
+
+  <h2 id="install-on-server">Install the key on a server with ssh-copy-id</h2>
+  <p>A first run of <code>ssh-copy-id</code> prints something like this:</p>
+  <pre><code>{`$ ssh-copy-id -i ~/.ssh/id_ed25519.pub user@host
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/home/you/.ssh/id_ed25519.pub"
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+user@host's password:
+
+Number of key(s) added: 1
+
+Now try logging into the machine, with: "ssh -i /home/you/.ssh/id_ed25519 'user@host'"
+and check to make sure that only the key(s) you wanted were added.`}</code></pre>
+  <p>
+    Use <code>-p 2222</code> for a different port. If the server has password logins turned off already, you need
+    another way in: a cloud provider's key field, a console, or someone who can append the key for you. The manual method,
+    restricted keys and how to turn off passwords safely are in <a href="/add-ssh-key-to-server">adding a key to a
+    server</a>.
+  </p>
+
+  <h2 id="multiple-keys">Use multiple SSH keys with ~/.ssh/config</h2>
+  <p>
+    Name each extra key with <code>-f</code>, then tell ssh which key goes with which host. Without this, ssh tries
+    <code>id_ed25519</code> and the other default names, plus everything in the agent, in order.
+  </p>
+  <pre><code>{`ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_work -C "you@company.com"`}</code></pre>
+  <pre><code>{`Host work-db
+  HostName db.internal.example.com
+  User alice
+  IdentityFile ~/.ssh/id_ed25519_work
+  IdentitiesOnly yes
+
+Host *
+  AddKeysToAgent yes
+  IdentityFile ~/.ssh/id_ed25519`}</code></pre>
+  <p>
+    Now <code>ssh work-db</code> uses the work key and only that key. For each option the first value found wins, so
+    keep <code>Host *</code> at the end. <code>ssh -G work-db</code> prints the settings that apply to a host.
+  </p>
+
+  <h2 id="selinux">SELinux on Fedora, RHEL, Rocky and Alma</h2>
+  <p>
+    On distributions with SELinux enforcing, sshd may only read files labelled <code>ssh_home_t</code>. A
+    <code>.ssh</code> folder created by <code>mv</code> from elsewhere, restored from a backup or copied with
+    <code>cp -a</code> can keep a wrong label, and key logins fail although the modes are right. Restore the default
+    labels on the server:
+  </p>
+  <pre><code>{`restorecon -R -v ~/.ssh`}</code></pre>
+  <p>
+    <code>ls -Z ~/.ssh</code> shows the current labels. The audit log (<code>sudo ausearch -m avc -ts recent</code>)
+    records the denial if SELinux is the cause.
+  </p>
+
+  <h2 id="browser-alternative">Keys from the browser generator</h2>
+  <p>
+    You can also generate a key in your browser with the <a href="/">sshkeygen.dev generator</a>. Move the downloaded
+    files into place and set the permissions:
+  </p>
+  <pre><code>{`mkdir -p ~/.ssh && chmod 700 ~/.ssh
+mv -i ~/Downloads/id_ed25519 ~/Downloads/id_ed25519.pub ~/.ssh/
+chmod 600 ~/.ssh/id_ed25519`}</code></pre>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <h3>"WARNING: UNPROTECTED PRIVATE KEY FILE!"</h3>
+  <pre><code>{`Permissions 0644 for '/home/you/.ssh/id_ed25519' are too open.
+It is required that your private key files are NOT accessible by others.
+This private key will be ignored.`}</code></pre>
+  <p>The private key is readable by other users. Run <code>chmod 600 ~/.ssh/id_ed25519</code>.</p>
+  <h3>"sign_and_send_pubkey: signing failed: agent refused operation"</h3>
+  <p>
+    The agent holds a key it cannot use, often after the files moved. Run <code>ssh-add -D</code>, fix the permissions
+    and add the key again.
+  </p>
+  <h3>"Could not open a connection to your authentication agent"</h3>
+  <p>
+    No agent runs in this shell. Start one with <code>eval "$(ssh-agent -s)"</code>. Note that running
+    <code>ssh-agent</code> without <code>eval</code> only prints the variables and does not set them.
+  </p>
+  <h3>"Permission denied (publickey)"</h3>
+  <p>
+    Run <code>ssh -v user@host</code>. Lines with <code>Offering public key</code> show which keys were tried; if yours
+    is missing, add <code>-i</code> or an <code>IdentityFile</code> line. If it is offered and refused, the server does
+    not have it in the right account, or the server's permissions are wrong. On a Fedora, RHEL or Rocky server with
+    correct permissions, the SELinux labels may be wrong: run <code>restorecon -Rv ~/.ssh</code> there.
+  </p>
+  <h3>"Bad owner or permissions on /home/you/.ssh/config"</h3>
+  <p>
+    Run <code>chmod 600 ~/.ssh/config</code>. If <code>ls -l</code> shows root as the owner, the file was edited with
+    sudo; fix it with <code>sudo chown "$USER": ~/.ssh/config</code>.
+  </p>
+  <h3>"Host key verification failed"</h3>
+  <p>
+    The server's key no longer matches <code>~/.ssh/known_hosts</code>, which happens after a reinstall and also during
+    an interception attempt. Verify the new fingerprint, then run <code>ssh-keygen -R host</code>. See
+    <a href="/ssh-key-fingerprint">SSH key fingerprints</a>.
+  </p>
+  <h3>"Unable to negotiate ... no matching host key type found. Their offer: ssh-rsa"</h3>
+  <p>
+    The server only offers the SHA-1 RSA signature, disabled by default since OpenSSH 8.8. Upgrade the server; if that is
+    impossible, allow it for that host only in <code>~/.ssh/config</code> with
+    <code>HostKeyAlgorithms +ssh-rsa</code> and <code>PubkeyAcceptedAlgorithms +ssh-rsa</code>.
+  </p>
+  <h3>"ssh-copy-id: ERROR: No identities found"</h3>
+  <p>
+    ssh-copy-id found no key to send. Pass the file explicitly with <code>-i ~/.ssh/id_ed25519.pub</code>, and check
+    that the key was really created.
+  </p>
+
+  <Faq items={faq} />
+</Article>

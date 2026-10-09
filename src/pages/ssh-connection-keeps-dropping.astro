@@ -1,0 +1,294 @@
+---
+import Article from '../layouts/Article.astro';
+import Faq from '../components/Faq.astro';
+import { faqSchema } from '../data/howto';
+import { TERMPHIN_APPLICATION } from '../data/site';
+
+const path = '/ssh-connection-keeps-dropping';
+const title = 'SSH Connection Keeps Dropping: Broken Pipe and Timeouts';
+const description =
+  'Why SSH says Broken pipe or Connection reset by peer, and how to fix it: ServerAliveInterval, ClientAliveInterval, tmux and mosh, and sessions that survive.';
+
+const toc = [
+  { id: 'errors', label: 'What the error messages mean' },
+  { id: 'causes', label: 'Why connections drop' },
+  { id: 'client-keepalive', label: 'Fix 1: keepalives from the client' },
+  { id: 'server-keepalive', label: 'Fix 2: keepalives from the server' },
+  { id: 'tcpkeepalive', label: 'What TCPKeepAlive does and does not do' },
+  { id: 'tmux', label: 'Fix 3: tmux or screen, so the shell survives' },
+  { id: 'mosh', label: 'Fix 4: mosh' },
+  { id: 'client-sessions', label: 'Fix 5: a client that keeps the session' },
+  { id: 'troubleshooting', label: 'Troubleshooting' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const faq = [
+  {
+    q: 'What does "client_loop: send disconnect: Broken pipe" mean?',
+    a: 'Your ssh client tried to send data over a TCP connection that no longer exists. Something between you and the server, or the server itself, dropped the connection while it was idle, and ssh only noticed when it next wrote to it. Keepalives with <code>ServerAliveInterval</code> usually prevent it.',
+  },
+  {
+    q: 'What is a good value for ServerAliveInterval?',
+    a: 'Between 15 and 60 seconds. 30 with <code>ServerAliveCountMax 4</code> is a sensible default: it keeps most NAT and firewall mappings open and gives up on a dead link after about two minutes. Very low values only add traffic.',
+  },
+  {
+    q: 'Should I set keepalives on the client or on the server?',
+    a: 'Either works for idle timeouts. The client setting is yours alone and needs no admin rights; the server setting protects every user and also lets the server clean up sessions whose client vanished. Setting both is fine.',
+  },
+  {
+    q: 'Can keepalives keep a session alive when I switch from Wi-Fi to mobile data?',
+    a: 'No. A network switch changes your IP address, and a TCP connection cannot move to a new address. You need something that survives a reconnect: tmux or screen on the server, mosh, or a client that reattaches for you.',
+  },
+  {
+    q: 'Is mosh a replacement for SSH?',
+    a: 'Only for the interactive terminal. It logs in over SSH and then switches to its own UDP protocol, so it needs <code>mosh-server</code> on the host and open UDP ports. It does not do port forwarding, file transfer or agent forwarding.',
+  },
+  {
+    q: 'Why does my SSH session die when I lock my phone?',
+    a: 'The phone pauses apps in the background to save battery, so the client stops answering, and the connection is dropped by the server, the network or the phone itself. A keepalive cannot help while the app is paused; a session that lives on the server, in tmux or a helper, can.',
+  },
+];
+
+const schema = [faqSchema(faq)];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="SSH connection keeps dropping"
+  heading="SSH connection keeps dropping: Broken pipe, resets and timeouts"
+  lead="An idle SSH session that dies with Broken pipe is almost always a network device forgetting the connection. Keepalives fix idle drops; tmux, mosh or a client that reattaches fix the rest."
+  updated="2026-10-09"
+  schema={schema}
+  mentions={[TERMPHIN_APPLICATION]}
+  termphinPitch="Tired of Broken pipe? Termphin is an SSH client whose sessions survive a dropped connection, a locked screen or a network switch, and reattach with the screen intact - no tmux setup."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> Add a keepalive to <code>~/.ssh/config</code> so idle connections are not dropped.
+      For drops keepalives cannot prevent, such as a network switch or a sleeping laptop, run your work inside
+      <code>tmux</code> and reattach after reconnecting.
+    </p>
+    <pre><code>{`Host *
+  ServerAliveInterval 30
+  ServerAliveCountMax 4`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="errors">What the error messages mean</h2>
+  <p>
+    The message depends on your OpenSSH version and on which side noticed first. They all say the same thing: the TCP
+    connection under your session is gone.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Message</th><th>What happened</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>client_loop: send disconnect: Broken pipe</code></td>
+          <td>Current OpenSSH. The client wrote to a connection that had already been dropped, usually after the session sat idle.</td>
+        </tr>
+        <tr>
+          <td><code>packet_write_wait: Connection to 203.0.113.10 port 22: Broken pipe</code></td>
+          <td>The same thing, as older OpenSSH versions word it.</td>
+        </tr>
+        <tr>
+          <td><code>Read from remote host example.com: Connection reset by peer</code></td>
+          <td>Something sent a TCP reset: the server, a firewall or a NAT device that no longer knows the connection.</td>
+        </tr>
+        <tr>
+          <td><code>Timeout, server example.com not responding.</code></td>
+          <td>Your own <code>ServerAliveInterval</code> gave up after <code>ServerAliveCountMax</code> unanswered checks. The link was dead, and ssh said so.</td>
+        </tr>
+        <tr>
+          <td><code>Connection to example.com closed by remote host.</code></td>
+          <td>The server ended the session on purpose: an idle limit, a reboot, or sshd being restarted with a config that kills sessions.</td>
+        </tr>
+        <tr>
+          <td><code>Connection timed out during banner exchange</code></td>
+          <td>TCP connected but the server never sent its SSH greeting in time. This is a login problem, not a drop; see <a href="#troubleshooting">Troubleshooting</a>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Note when it happens. A drop after a quiet spell of a few minutes points to an idle timeout. A drop when you move
+    between networks, open the laptop lid or come back to your phone points to the connection itself being cut, which
+    no setting on the connection can prevent.
+  </p>
+
+  <h2 id="causes">Why connections drop</h2>
+  <h3>NAT and firewall idle timeouts</h3>
+  <p>
+    Home routers, office firewalls and mobile carriers translate addresses (NAT) and keep a table of open connections.
+    An entry that sees no traffic for a while is deleted to save memory. Common limits range from a few minutes on
+    carrier-grade NAT to an hour on home routers. An SSH session where nothing is printed and nothing is typed sends no
+    packets at all, so the entry expires. The next keystroke goes nowhere or is answered with a reset.
+  </p>
+  <h3>Switching from Wi-Fi to mobile data</h3>
+  <p>
+    A TCP connection is tied to the IP addresses at both ends. When your device moves from Wi-Fi to mobile data, or
+    between access points that hand out different addresses, its address changes and the old connection is orphaned. The
+    server keeps waiting for packets from an address you no longer have.
+  </p>
+  <h3>Sleep, lid close and a locked phone</h3>
+  <p>
+    A sleeping laptop does not answer anything. Phones go further: they pause or restrict apps in the background to
+    save battery, so an SSH client stops reading from its socket soon after you lock the screen. Whichever side gives up
+    first, the session is gone by the time you return.
+  </p>
+  <h3>Server-side limits</h3>
+  <p>
+    A server can disconnect idle clients on purpose. Look for <code>ClientAliveInterval</code> with a low
+    <code>ClientAliveCountMax</code> in <code>/etc/ssh/sshd_config</code>, often set by hardening guides, or a shell
+    variable such as <code>TMOUT=600</code> in <code>/etc/profile</code>, which logs out an idle bash with
+    <code>timed out waiting for input: auto-logout</code>. If that is the cause, talk to whoever runs the server before
+    working around a policy.
+  </p>
+
+  <h2 id="client-keepalive">Fix 1: keepalives from the client</h2>
+  <p>
+    <code>ServerAliveInterval</code> makes ssh send a small encrypted message through the session after that many
+    seconds of silence. The traffic keeps NAT entries fresh, and the reply proves the server is still there. Add it to
+    <code>~/.ssh/config</code> for every host:
+  </p>
+  <pre><code>{`Host *
+  ServerAliveInterval 30
+  ServerAliveCountMax 4`}</code></pre>
+  <p>
+    With these values, a dead connection is detected after four unanswered checks, about two minutes, and ssh exits with
+    <code>Timeout, server ... not responding</code> instead of hanging forever. To try it once without editing the file:
+  </p>
+  <pre><code>ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=4 user@example.com</code></pre>
+  <p>
+    On Windows the file is <code>C:\Users\you\.ssh\config</code>, and the built-in OpenSSH client reads the same
+    options. If the file did not exist, make sure only you can write to it, or ssh refuses it with
+    <code>Bad owner or permissions</code>; on Linux and macOS that is <code>chmod 600 ~/.ssh/config</code>.
+  </p>
+
+  <h2 id="server-keepalive">Fix 2: keepalives from the server</h2>
+  <p>
+    The server has the mirror image, <code>ClientAliveInterval</code> and <code>ClientAliveCountMax</code>. It keeps the
+    path open for every user, including ones whose client has no keepalive, and it lets the server clean up sessions
+    whose client disappeared. Put it in a drop-in file, which current Debian, Ubuntu and Fedora include automatically:
+  </p>
+  <pre><code>{`sudo tee /etc/ssh/sshd_config.d/keepalive.conf <<'EOF'
+ClientAliveInterval 60
+ClientAliveCountMax 3
+EOF
+sudo sshd -t
+sudo systemctl reload ssh     # Debian and Ubuntu
+sudo systemctl reload sshd    # Fedora, RHEL, Arch`}</code></pre>
+  <p>
+    <code>sshd -t</code> checks the configuration first, so a typo cannot lock you out. Reloading keeps existing
+    sessions; the new values apply to the next login. If your distribution has no <code>sshd_config.d</code> folder,
+    add the two lines to <code>/etc/ssh/sshd_config</code> itself.
+  </p>
+
+  <h2 id="tcpkeepalive">What TCPKeepAlive does and does not do</h2>
+  <p>
+    <code>TCPKeepAlive yes</code> is the default on both sides. It asks the operating system to send TCP-level probes,
+    but most systems wait two hours before the first one, far longer than any NAT timeout. The probes are also not
+    encrypted, so they can be spoofed. Leave it on, it does no harm, but rely on <code>ServerAliveInterval</code> and
+    <code>ClientAliveInterval</code>, which travel inside the encrypted session.
+  </p>
+
+  <h2 id="tmux">Fix 3: tmux or screen, so the shell survives</h2>
+  <p>
+    Keepalives cannot save a connection whose IP address changed or whose client was asleep. What you can do is make
+    the connection unimportant: run your shell inside a terminal multiplexer on the server. The programs keep running
+    when SSH drops, and you reattach after logging in again.
+  </p>
+  <pre><code>{`tmux new -s work          # start a named session
+# work as usual, then detach with Ctrl+b, then d
+tmux ls                   # list sessions after reconnecting
+tmux attach -t work       # reattach`}</code></pre>
+  <p>One command that attaches if the session exists and creates it otherwise:</p>
+  <pre><code>ssh -t user@example.com tmux new -A -s work</code></pre>
+  <p>GNU screen works the same way, with different keys:</p>
+  <pre><code>{`screen -S work            # start
+# detach with Ctrl+a, then d
+screen -ls                # list
+screen -r work            # reattach`}</code></pre>
+  <p>
+    The trade-off is that tmux becomes part of your routine. You have to remember to start it, learn its prefix key and
+    its scrollback mode (<kbd>Ctrl</kbd>+<kbd>b</kbd> then <kbd>[</kbd>), and install it on every server. Nested inside
+    other tools it can also fight over key bindings.
+  </p>
+
+  <h2 id="mosh">Fix 4: mosh</h2>
+  <p>
+    mosh (mobile shell) logs in with SSH, starts <code>mosh-server</code> on the host and then talks to it over UDP. It
+    survives IP changes and sleep: when your device comes back, the session resumes. It also echoes your typing locally,
+    which helps on slow links.
+  </p>
+  <pre><code>{`sudo apt install mosh                 # on the server and the client
+sudo ufw allow 60000:61000/udp        # if the server has a firewall
+mosh user@example.com`}</code></pre>
+  <ul>
+    <li><strong>Pros:</strong> roams between networks, recovers after sleep, responsive on high latency.</li>
+    <li>
+      <strong>Cons:</strong> needs UDP ports 60000 to 61000 open, which many corporate networks and cloud security
+      groups block. No port forwarding, no agent forwarding and no file transfer. Scrollback is limited to what is on
+      screen, so many people run tmux inside mosh anyway. The server needs a UTF-8 locale and the mosh package.
+    </li>
+  </ul>
+
+  <h2 id="client-sessions">Fix 5: a client that keeps the session</h2>
+  <p>
+    The last option moves the work into the SSH client. Termphin, made by the team behind this site, uploads a small
+    open-source helper to the server over SSH. The helper keeps your shell running while you are away, and when the
+    connection comes back Termphin reattaches you where you left off, with the screen as it was. There is no tmux to
+    install or remember, and nothing to open on the firewall: it all runs over the same SSH connection on port 22.
+  </p>
+  <p>
+    The helper is optional; without it Termphin is a plain SSH client, and the keepalive advice above applies to it like
+    to any other. It is a good fit when the drops come from a phone being locked or a network switch, which is exactly
+    the case keepalives cannot fix.
+  </p>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <h3>"Connection timed out during banner exchange"</h3>
+  <p>
+    The TCP connection opened but sshd did not send its greeting. Common causes: the server is overloaded or swapping,
+    too many unauthenticated connections hit <code>MaxStartups</code> (often bots), a firewall or fail2ban is half
+    blocking you, or a slow reverse DNS lookup with <code>UseDNS yes</code>. Try again with
+    <code>ssh -v</code>, check the server's load, and look at <code>journalctl -u ssh</code> (or <code>-u sshd</code>).
+  </p>
+  <h3>"kex_exchange_identification: read: Connection reset by peer"</h3>
+  <p>
+    The server, or something in front of it, closed the connection before the handshake. Usually fail2ban, a
+    <code>hosts.deny</code> rule, <code>MaxStartups</code> or the wrong port behind a load balancer. It is a login
+    problem, not a dropped session.
+  </p>
+  <h3>Keepalives are set but sessions still drop</h3>
+  <p>
+    Check that the option is actually applied: <code>ssh -G example.com | grep -i serveralive</code> prints the values
+    ssh will use. A more specific <code>Host</code> block earlier in the file wins over <code>Host *</code>, because ssh
+    takes the first value it finds. If the values are right, the drop is probably a network change or sleep, not an idle
+    timeout.
+  </p>
+  <h3>The session freezes instead of disconnecting</h3>
+  <p>
+    Without keepalives, ssh can wait for a long time on a dead connection. Press <kbd>Enter</kbd>, then type
+    <code>~.</code> to close it from the client side, then reconnect. With <code>ServerAliveInterval</code> set, a dead
+    link ends on its own within a couple of minutes.
+  </p>
+  <h3>Drops only through a VPN</h3>
+  <p>
+    VPNs add their own idle timeouts and can lower the packet size. Keep the keepalive, and if sessions stall when a lot
+    of output is printed, the cause may be MTU: ask the VPN's administrator, or test with a smaller MTU on your
+    interface.
+  </p>
+
+  <Faq items={faq} />
+</Article>

@@ -1,0 +1,377 @@
+---
+import Article from '../layouts/Article.astro';
+import HowToSteps from '../components/HowToSteps.astro';
+import Faq from '../components/Faq.astro';
+import { faqSchema, howToSchema, type HowToStep } from '../data/howto';
+
+const path = '/generate-ssh-key-mac';
+const title = 'How to Generate an SSH Key on Mac (macOS Guide)';
+const description =
+  'Generate an Ed25519 SSH key on macOS with ssh-keygen, store the passphrase in the Keychain, set up ~/.ssh/config and copy the key to GitHub or a server.';
+
+const toc = [
+  { id: 'what-and-why', label: 'What an SSH key is and why you want one' },
+  { id: 'steps', label: 'How to generate an SSH key on Mac' },
+  { id: 'what-ssh-keygen-asks', label: 'What ssh-keygen asks you' },
+  { id: 'key-type', label: 'Ed25519 or RSA on a Mac' },
+  { id: 'keychain', label: 'Store the passphrase in the macOS Keychain' },
+  { id: 'clipboard', label: 'Copy the SSH public key to the clipboard (pbcopy)' },
+  { id: 'verify', label: 'Check that the key works' },
+  { id: 'browser-alternative', label: 'Keys from the browser generator' },
+  { id: 'multiple-keys', label: 'Use multiple SSH keys with ~/.ssh/config' },
+  { id: 'troubleshooting', label: 'Troubleshooting' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const steps: HowToStep[] = [
+  {
+    name: 'Open Terminal',
+    html: 'Press <kbd>Cmd</kbd> + <kbd>Space</kbd>, type Terminal and press Return. Every version of macOS ships OpenSSH, so there is nothing to install. Check the version if you like:',
+    code: 'ssh -V',
+  },
+  {
+    name: 'Check for existing keys',
+    html: 'List the contents of your <code>.ssh</code> folder. If you already see <code>id_ed25519</code> and <code>id_ed25519.pub</code>, you have a key and can skip to step 4, or give the new one a different file name so you do not overwrite it. "No such file or directory" just means you have no keys yet.',
+    code: 'ls -al ~/.ssh',
+  },
+  {
+    name: 'Generate the key pair',
+    html: 'Run ssh-keygen with the Ed25519 type and a comment that identifies the key, usually your email. Press Return to accept the default file location, then type a passphrase twice.',
+    code: 'ssh-keygen -t ed25519 -C "you@example.com"',
+    after: 'This writes the private key to <code>~/.ssh/id_ed25519</code> and the public key to <code>~/.ssh/id_ed25519.pub</code>, and creates <code>~/.ssh</code> if it is missing. If a server you use is too old for Ed25519, use <code>ssh-keygen -t rsa -b 4096</code> instead.',
+  },
+  {
+    name: 'Add the key to ssh-agent and the Keychain',
+    html: 'macOS starts ssh-agent for you through launchd. Add the key and store its passphrase in the login Keychain so you are not asked again:',
+    code: 'ssh-add --apple-use-keychain ~/.ssh/id_ed25519',
+    after: 'On macOS 11 Big Sur and older the flag is <code>-K</code> instead of <code>--apple-use-keychain</code>.',
+  },
+  {
+    name: 'Configure ~/.ssh/config',
+    html: 'So the key is loaded automatically after a reboot, add these lines to <code>~/.ssh/config</code> (create the file if it does not exist):',
+    code: 'Host *\n  AddKeysToAgent yes\n  UseKeychain yes\n  IdentityFile ~/.ssh/id_ed25519',
+    after: '<code>UseKeychain</code> is an Apple addition. If you share this file with Linux machines, put <code>IgnoreUnknown UseKeychain</code> above it so their OpenSSH does not reject the file.',
+  },
+  {
+    name: 'Copy the public key where you need it',
+    html: 'Copy the public key to the clipboard and paste it into GitHub, GitLab or your hosting panel, or install it on a server with <code>ssh-copy-id</code>, which macOS includes:',
+    code: 'pbcopy < ~/.ssh/id_ed25519.pub\nssh-copy-id -i ~/.ssh/id_ed25519.pub user@host',
+  },
+];
+
+const faq = [
+  {
+    q: 'Where are SSH keys stored on a Mac?',
+    a: 'In the hidden folder <code>~/.ssh</code>, which is <code>/Users/your-name/.ssh</code>. Finder hides it; run <code>open ~/.ssh</code> in Terminal, or press <kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>.</kbd> in a Finder window to show hidden files.',
+  },
+  {
+    q: 'Do I need Homebrew or any other software to create an SSH key on macOS?',
+    a: 'No. ssh, ssh-keygen, ssh-agent, ssh-add and ssh-copy-id are part of macOS. A Homebrew OpenSSH works too, but it does not understand the Apple-only <code>UseKeychain</code> option.',
+  },
+  {
+    q: 'Should I use ssh-add -K or --apple-use-keychain?',
+    a: 'Use <code>--apple-use-keychain</code> on macOS 12 Monterey and later. <code>-K</code> was the old spelling; current versions print a deprecation warning for it. On Big Sur and older, <code>-K</code> is the only form that works.',
+  },
+  {
+    q: 'Can I copy my SSH key to a new Mac?',
+    a: 'You can copy both files into <code>~/.ssh</code> on the new Mac and run <code>chmod 600</code> on the private key. A separate key per computer is better practice: if one machine is lost, you remove only its public key from GitHub and your servers.',
+  },
+  {
+    q: 'How do I show my public key on a Mac?',
+    a: 'Run <code>cat ~/.ssh/id_ed25519.pub</code>, or <code>pbcopy &lt; ~/.ssh/id_ed25519.pub</code> to put it on the clipboard. It is one line starting with <code>ssh-ed25519</code>. The file without <code>.pub</code> is the private key and is never shared.',
+  },
+  {
+    q: 'Is it safe to keep the passphrase in the Keychain?',
+    a: 'It is a reasonable trade-off. The login Keychain is encrypted with your account password, so a copied key file stays useless on its own. Anyone using your unlocked Mac can still use the key, so lock the screen when you step away.',
+  },
+  {
+    q: 'How do I delete an SSH key on a Mac?',
+    a: 'Remove its public key from GitHub and every server first, then run <code>ssh-add -d ~/.ssh/id_ed25519</code> and delete both files. If the passphrase was stored, also delete the matching "SSH: /Users/you/.ssh/id_ed25519" entry in Keychain Access.',
+  },
+];
+
+const schema = [
+  howToSchema({
+    name: 'How to generate an SSH key on macOS',
+    description,
+    path,
+    totalTime: 'PT5M',
+    tools: ['Terminal', 'OpenSSH ssh-keygen'],
+    steps,
+  }),
+  faqSchema(faq),
+];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="Generate an SSH key on Mac"
+  heading="How to generate an SSH key on macOS"
+  lead="macOS ships OpenSSH, so a key is one command away. Create an Ed25519 key, keep its passphrase in the Keychain and put the public key on GitHub or a server."
+  updated="2026-10-09"
+  schema={schema}
+  termphinPitch="Want this key on your phone as well? Termphin is an SSH client that imports OpenSSH keys like the one you just made and keeps your session alive when you lock the screen or change networks."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> Open Terminal and run the command below, press Return to keep the default file and
+      type a passphrase. Your public key is <code>~/.ssh/id_ed25519.pub</code>; <code>pbcopy</code> puts it on the
+      clipboard.
+    </p>
+    <pre><code>{`ssh-keygen -t ed25519 -C "you@example.com"
+pbcopy < ~/.ssh/id_ed25519.pub`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="what-and-why">What an SSH key is and why you want one</h2>
+  <p>
+    An SSH key is a pair of files. The <strong>private key</strong> stays on your Mac and proves who you are. The
+    <strong>public key</strong> is safe to hand out: you paste it into GitHub, GitLab or a server's
+    <code>authorized_keys</code> file, and from then on that service lets in whoever holds the matching private key.
+  </p>
+  <p>
+    Compared with a password, a key cannot be guessed, is never sent to the server, and cannot be phished on a fake login
+    page. GitHub no longer accepts account passwords for git over HTTPS, so for many people a key is simply the easiest
+    way to push code. On a server, keys let you turn off password logins altogether, which ends the endless brute-force
+    attempts every public machine sees.
+  </p>
+  <p>
+    A passphrase encrypts the private key on disk. macOS can store that passphrase in your login Keychain, so you get the
+    protection without typing it on every connection.
+  </p>
+
+  <h2 id="steps">How to generate an SSH key on Mac</h2>
+  <HowToSteps steps={steps} />
+
+  <h2 id="what-ssh-keygen-asks">What ssh-keygen asks you</h2>
+  <p>A complete run looks like this (your fingerprint and picture will differ):</p>
+  <pre><code>{`$ ssh-keygen -t ed25519 -C "you@example.com"
+Generating public/private ed25519 key pair.
+Enter file in which to save the key (/Users/you/.ssh/id_ed25519):
+Enter passphrase for "/Users/you/.ssh/id_ed25519" (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /Users/you/.ssh/id_ed25519
+Your public key has been saved in /Users/you/.ssh/id_ed25519.pub
+The key fingerprint is:
+SHA256:I2McFhOvOOgBGIf3aLmk0z7TTKxZoLZ32hK6Bxbk7Tw you@example.com
+The key's randomart image is:
++--[ED25519 256]--+
+|...   +.         |
+|o+.    +         |
+|=..+  o .        |
+| +*o.+ o         |
+| **+o * S        |
+|+=oE+o o .       |
+|oo=Bo            |
+| o*++.           |
+| .+++.           |
++----[SHA256]-----+`}</code></pre>
+  <p>
+    Older OpenSSH releases word the passphrase prompt as <code>Enter passphrase (empty for no passphrase):</code>. Nothing
+    appears on screen while you type the passphrase; that is normal.
+  </p>
+  <ul>
+    <li>
+      <strong>File location.</strong> Press Return for the default. Use a custom path such as
+      <code>~/.ssh/id_ed25519_work</code> only for separate keys, and point <code>IdentityFile</code> at it.
+    </li>
+    <li>
+      <strong>Overwrite (y/n)?</strong> appears if the file exists. Answer <code>n</code> unless you mean to replace a key:
+      every service that trusts the old one would lock you out.
+    </li>
+    <li>
+      <strong>Passphrase.</strong> Recommended: it encrypts the key on disk, and the Keychain means you type it once.
+      See <a href="/ssh-key-passphrase">passphrases</a>.
+    </li>
+    <li>
+      <strong>Fingerprint.</strong> A short hash of the public key. GitHub shows the same value next to each key, so you
+      can match them later. More in <a href="/ssh-key-fingerprint">SSH key fingerprints</a>.
+    </li>
+  </ul>
+  <p>The two files look like this:</p>
+  <pre><code>{`$ cat ~/.ssh/id_ed25519.pub
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICjC3B8SRdvp0H36PKIVoOSLOR8PA2GXw+6tRPH+FQ0z you@example.com
+
+$ head -1 ~/.ssh/id_ed25519
+-----BEGIN OPENSSH PRIVATE KEY-----`}</code></pre>
+
+  <h2 id="key-type">Ed25519 or RSA on a Mac</h2>
+  <p>
+    Use Ed25519. It is the default key type of current OpenSSH, its public key fits on one short line, and GitHub,
+    GitLab, Bitbucket and every maintained server accept it. Create an RSA key, at 3072 or 4096 bits, only for a system
+    that refuses Ed25519, such as an old network appliance. You can keep both side by side; the comparison is in
+    <a href="/ed25519-vs-rsa">Ed25519 vs RSA</a>.
+  </p>
+
+  <h2 id="keychain">Store the passphrase in the macOS Keychain</h2>
+  <p>
+    Apple's OpenSSH has two additions that connect ssh-agent to the Keychain:
+  </p>
+  <ul>
+    <li>
+      <code>ssh-add --apple-use-keychain</code> adds a key to the agent and saves its passphrase in the login Keychain.
+    </li>
+    <li>
+      <code>UseKeychain yes</code> in <code>~/.ssh/config</code> makes ssh read the passphrase from the Keychain when it
+      needs the key, and store it there when you type it at a prompt.
+    </li>
+  </ul>
+  <p>
+    <code>AddKeysToAgent yes</code> is standard OpenSSH: the first time a key is used it goes into the agent, so later
+    connections in the same login session need nothing. Together, the three mean you type the passphrase once, ever.
+  </p>
+  <p>To check what the agent holds now:</p>
+  <pre><code>{`$ ssh-add -l
+256 SHA256:I2McFhOvOOgBGIf3aLmk0z7TTKxZoLZ32hK6Bxbk7Tw you@example.com (ED25519)`}</code></pre>
+  <p>
+    "The agent has no identities." is normal right after a restart; the key is loaded on first use. To load every key
+    whose passphrase is in the Keychain right away, for example in a login script, run
+    <code>ssh-add --apple-load-keychain</code>.
+  </p>
+  <div class="note">
+    <p>
+      Order matters in <code>~/.ssh/config</code>: for each option, the first value ssh finds wins. Put specific
+      <code>Host</code> blocks first and the <code>Host *</code> defaults at the end of the file.
+    </p>
+  </div>
+
+  <h2 id="clipboard">Copy the SSH public key to the clipboard (pbcopy)</h2>
+  <pre><code>{`pbcopy < ~/.ssh/id_ed25519.pub`}</code></pre>
+  <p>
+    The command prints nothing; the key is now on the clipboard. Paste it into the SSH keys page of GitHub, GitLab or a
+    hosting panel. A correct public key is a single line of the form <code>ssh-ed25519 AAAA... comment</code>. If what
+    you pasted starts with <code>-----BEGIN</code>, you copied the private key: delete it from wherever you pasted it.
+  </p>
+  <p>
+    For a server you can log in to with a password, skip the clipboard and let <code>ssh-copy-id</code> install it.
+    Details, permissions and how to turn off password logins afterwards are in
+    <a href="/add-ssh-key-to-server">adding a key to a server</a>.
+  </p>
+
+  <h2 id="verify">Check that the key works</h2>
+  <p>
+    After adding the key to GitHub (step-by-step in <a href="/ssh-key-for-github">SSH key for GitHub</a>), test it:
+  </p>
+  <pre><code>{`$ ssh -T git@github.com
+Hi your-username! You've successfully authenticated, but GitHub does not provide shell access.`}</code></pre>
+  <p>
+    For a server, <code>ssh user@host</code> should log you in without asking for the account password. If anything
+    fails, <code>ssh -v</code> shows which keys were offered:
+  </p>
+  <pre><code>{`debug1: Offering public key: /Users/you/.ssh/id_ed25519 ED25519 SHA256:I2Mc... agent
+debug1: Server accepts key: /Users/you/.ssh/id_ed25519 ED25519 SHA256:I2Mc... agent`}</code></pre>
+
+  <h2 id="browser-alternative">Keys from the browser generator</h2>
+  <p>
+    You can also generate a key in your browser with the <a href="/">sshkeygen.dev generator</a>. Its files land in
+    Downloads, readable by other users. Move them and fix the permissions:
+  </p>
+  <pre><code>{`mkdir -p ~/.ssh && chmod 700 ~/.ssh
+mv -i ~/Downloads/id_ed25519 ~/Downloads/id_ed25519.pub ~/.ssh/
+chmod 600 ~/.ssh/id_ed25519
+chmod 644 ~/.ssh/id_ed25519.pub`}</code></pre>
+  <p>From there, continue with step 4 above.</p>
+
+  <h2 id="multiple-keys">Use multiple SSH keys with ~/.ssh/config</h2>
+  <p>
+    Separate keys for work and personal accounts, or for a customer's servers, are common. Create the second key under
+    its own name:
+  </p>
+  <pre><code>{`ssh-keygen -t ed25519 -C "you@company.com" -f ~/.ssh/id_ed25519_work`}</code></pre>
+  <p>
+    Then give each host its own block in <code>~/.ssh/config</code>. <code>IdentitiesOnly yes</code> stops ssh from
+    offering every key in the agent, which can trip a server's limit of authentication attempts:
+  </p>
+  <pre><code>{`Host github-work
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_work
+  IdentitiesOnly yes
+
+Host build
+  HostName 203.0.113.20
+  User deploy
+  IdentityFile ~/.ssh/id_ed25519_work
+
+Host *
+  AddKeysToAgent yes
+  UseKeychain yes
+  IdentityFile ~/.ssh/id_ed25519`}</code></pre>
+  <p>
+    Then clone with <code>git clone git@github-work:company/repo.git</code>, and <code>ssh build</code> replaces the full
+    address. Run <code>ssh -G github-work</code> to see the settings ssh would actually use for a host.
+  </p>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <h3>"Permissions 0644 for '~/.ssh/id_ed25519' are too open"</h3>
+  <p>The full message is:</p>
+  <pre><code>{`@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE KEY FILE!          @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+Permissions 0644 for '/Users/you/.ssh/id_ed25519' are too open.
+It is required that your private key files are NOT accessible by others.
+This private key will be ignored.`}</code></pre>
+  <p>
+    ssh refuses a private key that other users can read. Run <code>chmod 600 ~/.ssh/id_ed25519</code> and try again.
+    The folder itself should be <code>700</code>.
+  </p>
+  <h3>The passphrase is asked for after every restart</h3>
+  <p>
+    The key is in the agent but not in the Keychain configuration. Make sure <code>~/.ssh/config</code> contains
+    <code>UseKeychain yes</code> and <code>AddKeysToAgent yes</code>, and that you ran
+    <code>ssh-add --apple-use-keychain</code> once.
+  </p>
+  <h3>"Permission denied (publickey)"</h3>
+  <p>
+    The server lacks your public key, or ssh offers a different one. Run <code>ssh -v user@host</code> and look for
+    <code>Offering public key</code>. More causes in <a href="/add-ssh-key-to-server">adding a key to a server</a>.
+  </p>
+  <h3>"Bad configuration option: usekeychain"</h3>
+  <p>
+    You are running an OpenSSH that is not Apple's, for example one installed with Homebrew. Add
+    <code>IgnoreUnknown UseKeychain</code> at the top of <code>~/.ssh/config</code>, or call Apple's binary at
+    <code>/usr/bin/ssh</code>. <code>which ssh</code> shows which one runs.
+  </p>
+  <h3>"Bad owner or permissions on /Users/you/.ssh/config"</h3>
+  <p>
+    The config file must belong to you and must not be writable by others. Fix it with
+    <code>chmod 600 ~/.ssh/config</code>, and if it belongs to root because it was created with sudo,
+    <code>sudo chown "$USER" ~/.ssh/config</code>.
+  </p>
+  <h3>"Could not open a connection to your authentication agent"</h3>
+  <p>
+    ssh-add cannot find the agent, usually because <code>SSH_AUTH_SOCK</code> is empty in this shell, for example inside
+    tmux or after <code>sudo</code>. Open a new Terminal window, or start an agent for this shell with
+    <code>eval "$(ssh-agent -s)"</code>.
+  </p>
+  <h3>"sign_and_send_pubkey: signing failed ... agent refused operation"</h3>
+  <p>
+    The agent lists a key it can no longer use, often after the file was moved or its permissions changed. Run
+    <code>ssh-add -D</code> to clear the agent, fix the permissions with <code>chmod 600</code>, and add the key again.
+  </p>
+  <h3>"Host key verification failed"</h3>
+  <p>
+    The server's host key does not match the one stored in <code>~/.ssh/known_hosts</code>, or you answered no to the
+    first-connection prompt. Confirm the new fingerprint with the server's owner, then remove the old entry with
+    <code>ssh-keygen -R host</code>. The reasons are explained in <a href="/ssh-key-fingerprint">SSH key fingerprints</a>.
+  </p>
+  <h3>"no matching host key type found. Their offer: ssh-rsa"</h3>
+  <p>
+    The server is old and only offers an RSA host key signed with SHA-1, which current OpenSSH no longer accepts by
+    default. Update the server if you can. If you cannot, allow it for that one host only:
+  </p>
+  <pre><code>{`Host old-router
+  HostName 192.0.2.1
+  HostKeyAlgorithms +ssh-rsa
+  PubkeyAcceptedAlgorithms +ssh-rsa`}</code></pre>
+
+  <Faq items={faq} />
+</Article>

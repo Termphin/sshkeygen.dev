@@ -1,0 +1,344 @@
+---
+import Article from '../layouts/Article.astro';
+import HowToSteps from '../components/HowToSteps.astro';
+import Faq from '../components/Faq.astro';
+import { faqSchema, howToSchema, type HowToStep } from '../data/howto';
+
+const path = '/ssh-key-for-github';
+const title = 'Add an SSH Key to GitHub, GitLab and Bitbucket';
+const description =
+  'Create an SSH key for GitHub, add it to your account, test it with ssh -T and switch repositories to SSH. Includes GitLab, Bitbucket and commit signing.';
+
+const toc = [
+  { id: 'why', label: 'SSH or HTTPS for git?' },
+  { id: 'github', label: 'Add an SSH key to GitHub' },
+  { id: 'first-connection', label: 'Verify GitHub\'s host key on first connect' },
+  { id: 'https-to-ssh', label: 'Switch a repository from HTTPS to SSH' },
+  { id: 'gitlab', label: 'GitLab' },
+  { id: 'bitbucket', label: 'Bitbucket' },
+  { id: 'deploy-keys', label: 'Deploy keys for servers and CI' },
+  { id: 'several-accounts', label: 'Several accounts on one computer' },
+  { id: 'signing', label: 'Signing commits with your SSH key' },
+  { id: 'port-443', label: 'SSH over port 443' },
+  { id: 'troubleshooting', label: 'Troubleshooting' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const steps: HowToStep[] = [
+  {
+    name: 'Create a key, or reuse one you have',
+    html: 'One Ed25519 key per computer is the usual setup, and the same key can be added to GitHub, GitLab and Bitbucket. Generate one with ssh-keygen, or in your browser with the <a href="/">sshkeygen.dev generator</a>.',
+    code: 'ssh-keygen -t ed25519 -C "you@example.com"',
+  },
+  {
+    name: 'Copy the public key',
+    html: 'Copy the contents of the <code>.pub</code> file, one line starting with <code>ssh-ed25519</code>. Never paste the private key, the file without an extension.',
+    code: 'pbcopy < ~/.ssh/id_ed25519.pub                                    # macOS\ncat ~/.ssh/id_ed25519.pub                                         # Linux, then select\nGet-Content $env:USERPROFILE\\.ssh\\id_ed25519.pub | Set-Clipboard  # Windows',
+  },
+  {
+    name: 'Add the key in GitHub settings',
+    html: 'On GitHub, open your profile picture menu, then <strong>Settings</strong>, <strong>SSH and GPG keys</strong>, <strong>New SSH key</strong> (or go straight to github.com/settings/keys). Give it a title that names the computer, leave the key type as <strong>Authentication Key</strong>, paste the key and click <strong>Add SSH key</strong>.',
+  },
+  {
+    name: 'Test the connection',
+    html: 'The first time, ssh asks you to confirm GitHub\'s host key. Compare the fingerprint with the one GitHub publishes (for Ed25519 it is <code>SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU</code>) and type yes.',
+    code: 'ssh -T git@github.com',
+    after: 'A successful test answers <code>Hi username! You\'ve successfully authenticated, but GitHub does not provide shell access.</code>',
+  },
+  {
+    name: 'Use SSH URLs for your repositories',
+    html: 'Clone with the SSH address, or switch an existing clone from HTTPS:',
+    code: 'git clone git@github.com:owner/repo.git\ngit remote set-url origin git@github.com:owner/repo.git',
+  },
+];
+
+const faq = [
+  {
+    q: 'Can I use the same SSH key for GitHub, GitLab and Bitbucket?',
+    a: 'Yes. A public key can be added to any number of services, and each one only learns your public key. The usual setup is one key per computer, added to every host you use from that computer.',
+  },
+  {
+    q: 'Can one SSH key belong to two GitHub accounts?',
+    a: 'No. GitHub identifies the account by the key, so a key can be attached to only one account, and adding it again gives "Key is already in use". Create a second key and a host alias in <code>~/.ssh/config</code>, as shown above.',
+  },
+  {
+    q: 'Why does ssh -T git@github.com exit with an error code when it works?',
+    a: 'GitHub closes the session right after the greeting because it does not provide a shell, so ssh exits with status 1. The "Hi username!" message is what tells you authentication succeeded.',
+  },
+  {
+    q: 'Should I use SSH or HTTPS with GitHub?',
+    a: 'Both are secure. SSH uses a key you set up once and works well with an agent; HTTPS uses a personal access token or a credential manager and passes through proxies that block port 22. If you already have an SSH key, SSH is the simpler daily setup.',
+  },
+  {
+    q: 'Do SSH keys on GitHub expire?',
+    a: 'GitHub keys have no expiry date, but GitHub removes a key that has not been used for a year as a precaution. GitLab lets you set an expiry date per key. Review your keys now and then and delete ones you do not recognise.',
+  },
+  {
+    q: 'What is the difference between an authentication key and a signing key on GitHub?',
+    a: 'An authentication key lets you push and pull over SSH. A signing key is used only to verify signatures on commits and tags. The same public key can be added twice, once of each type.',
+  },
+  {
+    q: 'Does GitHub accept RSA keys?',
+    a: 'Yes, RSA keys still work, signed with SHA-2 by any current OpenSSH. DSA keys are no longer accepted. For a new key, Ed25519 is the better choice; see <a href="/ed25519-vs-rsa">Ed25519 vs RSA</a>.',
+  },
+];
+
+const schema = [
+  howToSchema({
+    name: 'How to add an SSH key to GitHub',
+    description,
+    path,
+    totalTime: 'PT5M',
+    tools: ['Git', 'OpenSSH'],
+    steps,
+  }),
+  faqSchema(faq),
+];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="SSH key for GitHub"
+  heading="How to add an SSH key to GitHub, GitLab and Bitbucket"
+  lead="With an SSH key, git push and pull stop asking for tokens. Add a key to GitHub, GitLab or Bitbucket, use several accounts on one machine, and sign commits with the same key."
+  updated="2026-10-09"
+  schema={schema}
+  termphinPitch="Pushing from your phone? Termphin is an SSH client that imports your OpenSSH key, keeps it in an encrypted vault and holds the session open while git runs, even if the connection drops."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> Create a key, paste the contents of <code>~/.ssh/id_ed25519.pub</code> into GitHub
+      under Settings, SSH and GPG keys, New SSH key, then test it. The test should greet you by your GitHub username.
+    </p>
+    <pre><code>{`ssh-keygen -t ed25519 -C "you@example.com"
+cat ~/.ssh/id_ed25519.pub
+ssh -T git@github.com`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="why">SSH or HTTPS for git?</h2>
+  <p>
+    Git talks to GitHub, GitLab and Bitbucket over HTTPS or SSH. GitHub stopped accepting account passwords for git
+    operations in 2021, so HTTPS now means a personal access token or a credential helper. SSH means a key pair: you add
+    the public key to your account once, and every <code>git clone</code>, <code>pull</code> and <code>push</code> using a
+    <code>git@github.com:</code> address authenticates with it.
+  </p>
+  <p>
+    The key itself is created on your computer; the guides for <a href="/generate-ssh-key-mac">macOS</a>,
+    <a href="/generate-ssh-key-linux">Linux</a> and <a href="/generate-ssh-key-windows">Windows</a> cover the
+    platform details such as the agent. This page is about the git host side.
+  </p>
+
+  <h2 id="github">Add an SSH key to GitHub</h2>
+  <HowToSteps steps={steps} />
+  <p>
+    If you use the GitHub CLI, <code>gh ssh-key add ~/.ssh/id_ed25519.pub --title "work laptop"</code> does step 3 from
+    the terminal.
+  </p>
+
+  <h2 id="first-connection">Verify GitHub's host key on first connect</h2>
+  <p>The first test prints something like this:</p>
+  <pre><code>{`$ ssh -T git@github.com
+The authenticity of host 'github.com (140.82.121.4)' can't be established.
+ED25519 key fingerprint is SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added 'github.com' (ED25519) to the list of known hosts.
+Hi your-username! You've successfully authenticated, but GitHub does not provide shell access.`}</code></pre>
+  <p>
+    The question protects you from a network that impersonates GitHub. Answer <code>yes</code> only if the fingerprint
+    matches one GitHub publishes in its documentation:
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Host</th><th>Type</th><th>Fingerprint</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>github.com</td><td>ED25519</td><td><code>SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU</code></td></tr>
+        <tr><td>github.com</td><td>ECDSA</td><td><code>SHA256:p2QAMXNIC1TJYWeIOttrVc98/R1BUFWu3/LiyKgUfQM</code></td></tr>
+        <tr><td>github.com</td><td>RSA</td><td><code>SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s</code></td></tr>
+        <tr><td>gitlab.com</td><td>ED25519</td><td><code>SHA256:eUXGGm1YGsMAS7vkcx6JOJdOGHPem5gQp4taiCfCLB8</code></td></tr>
+        <tr><td>bitbucket.org</td><td>ED25519</td><td><code>SHA256:ybgmFkzwOSotHTHLJgHO0QN8L0xErw6vd0VhFA9m3SM</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Which type ssh shows depends on your client; any of them matching is fine. If the fingerprint differs, stop and
+    find out why before typing yes. Background in <a href="/ssh-key-fingerprint">SSH key fingerprints</a>.
+  </p>
+
+  <h2 id="https-to-ssh">Switch a repository from HTTPS to SSH</h2>
+  <p>A repository cloned over HTTPS keeps asking for credentials. Check its remote:</p>
+  <pre><code>{`$ git remote -v
+origin  https://github.com/owner/repo.git (fetch)
+origin  https://github.com/owner/repo.git (push)`}</code></pre>
+  <p>Replace the address with the SSH form and check again:</p>
+  <pre><code>{`git remote set-url origin git@github.com:owner/repo.git
+git remote -v
+git fetch`}</code></pre>
+  <p>
+    The pattern is the same on every host: <code>https://HOST/PATH.git</code> becomes <code>git@HOST:PATH.git</code>.
+    To make git rewrite every GitHub HTTPS address automatically, add
+    <code>git config --global url."git@github.com:".insteadOf "https://github.com/"</code>.
+  </p>
+
+  <h2 id="gitlab">GitLab</h2>
+  <ol>
+    <li>Sign in, open your avatar menu and choose <strong>Edit profile</strong>, then <strong>SSH Keys</strong> in the sidebar.</li>
+    <li>Click <strong>Add new key</strong>, paste the public key, give it a title, and optionally set an expiration date. GitLab emails you before a key expires.</li>
+    <li>Test it. The answer is <code>Welcome to GitLab, @username!</code></li>
+  </ol>
+  <pre><code>ssh -T git@gitlab.com</code></pre>
+  <p>
+    On a self-managed GitLab, use your instance's host name, and get its host key fingerprints from your administrator.
+    GitLab can also mark a key for authentication, signing, or both.
+  </p>
+
+  <h2 id="bitbucket">Bitbucket</h2>
+  <ol>
+    <li>Open the gear menu, choose <strong>Personal Bitbucket settings</strong>, then <strong>SSH keys</strong>.</li>
+    <li>Click <strong>Add key</strong>, give it a label, paste the public key and save.</li>
+    <li>Test it. Bitbucket replies that you are authenticated and that shell access is disabled.</li>
+  </ol>
+  <pre><code>ssh -T git@bitbucket.org</code></pre>
+
+  <h2 id="deploy-keys">Deploy keys for servers and CI</h2>
+  <p>
+    For a key only one repository should use, such as on a build server, add it as an <strong>access key</strong>
+    (Bitbucket) or <strong>deploy key</strong> (GitHub, GitLab) in that repository instead. It can be read-only.
+  </p>
+  <ul>
+    <li>Create a dedicated key without a passphrase on the machine that needs it: <code>ssh-keygen -t ed25519 -N "" -f ~/.ssh/deploy_repo -C "deploy@build-01"</code>.</li>
+    <li>Add the public key in the repository's settings, under Deploy keys, and allow write access only if the machine has to push.</li>
+    <li>On GitHub, a deploy key can be attached to a single repository. For several repositories, use one key per repository with host aliases, or a machine user.</li>
+  </ul>
+  <p>
+    A deploy key gives access to one repository instead of everything your account can reach, so a leaked build server
+    costs much less.
+  </p>
+
+  <h2 id="several-accounts">Several accounts on one computer</h2>
+  <p>
+    The host identifies the account by the key, so each account needs its own key and a host alias in
+    <code>~/.ssh/config</code>:
+  </p>
+  <pre><code>{`ssh-keygen -t ed25519 -C "you@company.com" -f ~/.ssh/id_ed25519_work`}</code></pre>
+  <pre><code>{`Host github.com
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+
+Host github-work
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_work
+  IdentitiesOnly yes`}</code></pre>
+  <p>
+    Clone work repositories with the alias, as in <code>git clone git@github-work:company/repo.git</code>.
+    <code>IdentitiesOnly yes</code> is essential: without it, ssh offers the agent's first key and GitHub logs you in as
+    that account. Test each alias separately; each should greet a different username:
+  </p>
+  <pre><code>{`ssh -T git@github.com
+ssh -T git@github-work`}</code></pre>
+  <p>
+    For an existing work clone, point its remote at the alias with
+    <code>git remote set-url origin git@github-work:company/repo.git</code>, and set the matching commit email in that
+    repository with <code>git config user.email you@company.com</code>.
+  </p>
+
+  <h2 id="signing">Signing commits with your SSH key</h2>
+  <p>
+    Git 2.34 and later sign commits with an SSH key, no GPG needed. Add the public key on GitHub again with the type
+    <strong>Signing Key</strong> (on GitLab, usage set to signing), then:
+  </p>
+  <pre><code>{`git config --global gpg.format ssh
+git config --global user.signingkey ~/.ssh/id_ed25519.pub
+git config --global commit.gpgsign true
+git config --global tag.gpgsign true`}</code></pre>
+  <p>
+    GitHub shows a <strong>Verified</strong> badge when the signing key is on your account and the commit's email is a
+    verified address of that account. To verify signatures locally as well, tell git which keys to trust with an
+    <code>allowed_signers</code> file:
+  </p>
+  <pre><code>{`mkdir -p ~/.config/git
+echo "you@example.com namespaces=\\"git\\" $(cat ~/.ssh/id_ed25519.pub)" >> ~/.config/git/allowed_signers
+git config --global gpg.ssh.allowedSignersFile ~/.config/git/allowed_signers
+git log --show-signature -1`}</code></pre>
+  <p>
+    The last command should print <code>Good "git" signature for you@example.com with ED25519 key SHA256:...</code>. The
+    signing itself is done by <code>ssh-keygen -Y sign</code>; see the <a href="/ssh-keygen#signing">ssh-keygen
+    reference</a>.
+  </p>
+
+  <h2 id="port-443">SSH over port 443</h2>
+  <p>
+    Some corporate and hotel networks block outgoing port 22. All three hosts also answer SSH on port 443, under a
+    different host name. Add this to <code>~/.ssh/config</code>:
+  </p>
+  <pre><code>{`Host github.com
+  HostName ssh.github.com
+  Port 443
+  User git
+
+Host gitlab.com
+  HostName altssh.gitlab.com
+  Port 443
+  User git
+
+Host bitbucket.org
+  HostName altssh.bitbucket.org
+  Port 443
+  User git`}</code></pre>
+  <p>
+    Test with <code>ssh -T git@github.com</code> as before. Your repository URLs do not change.
+  </p>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <h3>"git@github.com: Permission denied (publickey)"</h3>
+  <p>
+    Run <code>ssh -vT git@github.com</code> and check which files are offered. Usually the key is not loaded
+    (<code>ssh-add -l</code>), has a non-default name without an <code>IdentityFile</code> line, or belongs to another
+    account. The same message from <code>git push</code> also appears if you ran git with sudo, which uses root's keys.
+  </p>
+  <h3>"Key is already in use"</h3>
+  <p>
+    A key can belong to only one GitHub account, or to one repository as a deploy key. Use a separate key for the second
+    account.
+  </p>
+  <h3>"ERROR: Repository not found" or "Please make sure you have the correct access rights"</h3>
+  <p>
+    You authenticated, but as an account without access to that repository. <code>ssh -T git@github.com</code> shows which
+    username the key belongs to. Fix the alias or <code>IdentityFile</code> so the right key is used.
+  </p>
+  <h3>Git still asks for a username and password</h3>
+  <p>
+    The repository uses an HTTPS remote. Check it with <code>git remote -v</code> and switch it to the
+    <code>git@github.com:</code> form with <code>git remote set-url</code>.
+  </p>
+  <h3>"Host key verification failed"</h3>
+  <p>
+    You answered no to the host key question, or <code>known_hosts</code> holds an old key. GitHub rotated its RSA host
+    key in 2023, which produced this error for many people. Remove the stale entry with
+    <code>ssh-keygen -R github.com</code> and connect again, checking the fingerprint against the table above.
+  </p>
+  <h3>"sign_and_send_pubkey: signing failed ... agent refused operation"</h3>
+  <p>
+    The agent holds a key it cannot use. Clear it with <code>ssh-add -D</code>, make sure the private key has mode
+    <code>600</code>, and add it again.
+  </p>
+  <h3>Port 22 is blocked by a firewall</h3>
+  <p>
+    <code>ssh: connect to host github.com port 22: Connection timed out</code> means the network blocks SSH. Use the port
+    443 configuration above.
+  </p>
+
+  <Faq items={faq} />
+</Article>

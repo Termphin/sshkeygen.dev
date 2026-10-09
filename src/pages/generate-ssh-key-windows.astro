@@ -1,0 +1,349 @@
+---
+import Article from '../layouts/Article.astro';
+import HowToSteps from '../components/HowToSteps.astro';
+import Faq from '../components/Faq.astro';
+import { faqSchema, howToSchema, type HowToStep } from '../data/howto';
+
+const path = '/generate-ssh-key-windows';
+const title = 'How to Generate an SSH Key on Windows 10 and 11';
+const description =
+  'Generate an Ed25519 SSH key on Windows with the built-in OpenSSH client and PowerShell, enable ssh-agent, fix key permissions and use it with Git and servers.';
+
+const toc = [
+  { id: 'what-and-why', label: 'Before you start' },
+  { id: 'steps', label: 'How to generate an SSH key on Windows' },
+  { id: 'output', label: 'What ssh-keygen prints on Windows' },
+  { id: 'where', label: 'Where Windows stores SSH keys' },
+  { id: 'agent', label: 'The ssh-agent service' },
+  { id: 'permissions', label: 'Fixing "Bad permissions" on the private key' },
+  { id: 'git', label: 'Making Git use the Windows agent' },
+  { id: 'config', label: 'An ssh config file on Windows' },
+  { id: 'putty', label: 'PuTTY, WSL and other tools' },
+  { id: 'windows-server', label: 'Keys for a Windows OpenSSH server' },
+  { id: 'troubleshooting', label: 'Troubleshooting' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const steps: HowToStep[] = [
+  {
+    name: 'Check that the OpenSSH client is installed',
+    html: 'Windows 10 (version 1809 and later) and Windows 11 include the OpenSSH client. Open PowerShell and run:',
+    code: 'ssh -V',
+    after: 'If the command is not found, install it from Settings, System, Optional features, OpenSSH Client, or from an Administrator PowerShell with <code>Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0</code>.',
+  },
+  {
+    name: 'Generate the key pair',
+    html: 'In a normal PowerShell window, run ssh-keygen. Press Enter to accept the default location and type a passphrase twice.',
+    code: 'ssh-keygen -t ed25519 -C "you@example.com"',
+    after: 'The files land in <code>C:\\Users\\you\\.ssh\\id_ed25519</code> and <code>id_ed25519.pub</code>. Always pass <code>-t ed25519</code>: older Windows builds of OpenSSH create an RSA key when no type is given. Use <code>ssh-keygen -t rsa -b 4096</code> only for systems that do not accept Ed25519.',
+  },
+  {
+    name: 'Enable and start ssh-agent',
+    html: 'The agent service ships disabled. In PowerShell run as Administrator, set it to start automatically and start it now:',
+    code: 'Get-Service ssh-agent | Set-Service -StartupType Automatic\nStart-Service ssh-agent',
+  },
+  {
+    name: 'Add the key to the agent',
+    html: 'Back in a normal PowerShell window, add the key and enter its passphrase. The Windows agent keeps it, protected by your Windows account, across reboots.',
+    code: 'ssh-add "$env:USERPROFILE\\.ssh\\id_ed25519"',
+  },
+  {
+    name: 'Copy the public key',
+    html: 'Put the public key on the clipboard to paste into GitHub, GitLab or a hosting panel:',
+    code: 'Get-Content "$env:USERPROFILE\\.ssh\\id_ed25519.pub" | Set-Clipboard',
+  },
+  {
+    name: 'Install the key on a Linux server',
+    html: 'Windows has no <code>ssh-copy-id</code>. This one-liner does the same job: it logs in with your password once and appends the key to <code>authorized_keys</code> with the right permissions.',
+    code: 'type "$env:USERPROFILE\\.ssh\\id_ed25519.pub" | ssh user@host "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"',
+  },
+];
+
+const faq = [
+  {
+    q: 'Do I still need PuTTY or PuTTYgen to create an SSH key on Windows?',
+    a: 'No. Windows 10 version 1809 and later and Windows 11 include OpenSSH, so <code>ssh-keygen</code> in PowerShell or Command Prompt is enough. You only need PuTTYgen to convert a key to <code>.ppk</code> for PuTTY or WinSCP.',
+  },
+  {
+    q: 'Where is my SSH key on Windows?',
+    a: 'In <code>C:\\Users\\your-name\\.ssh</code>: <code>id_ed25519</code> is the private key and <code>id_ed25519.pub</code> the public key. Open the folder with <code>explorer "$env:USERPROFILE\\.ssh"</code>.',
+  },
+  {
+    q: 'Does ssh-agent on Windows remember keys after a reboot?',
+    a: 'Yes. Unlike the agent on Linux and macOS, the Windows ssh-agent service stores added keys, encrypted for your Windows account, and offers them again after a restart. Remove a key with <code>ssh-add -d</code> or all of them with <code>ssh-add -D</code>.',
+  },
+  {
+    q: 'Can I use the same key in PowerShell, Git Bash and WSL?',
+    a: 'PowerShell, Command Prompt, Windows Terminal and VS Code share the system OpenSSH and its agent. Git Bash uses its own ssh unless you set <code>core.sshCommand</code>. WSL has a separate Linux home; copy the key there and run <code>chmod 600</code>, or create a separate key inside WSL.',
+  },
+  {
+    q: 'How do I copy the public key in Command Prompt?',
+    a: 'Run <code>type %USERPROFILE%\\.ssh\\id_ed25519.pub | clip</code>. In PowerShell, use <code>Get-Content</code> piped to <code>Set-Clipboard</code>.',
+  },
+  {
+    q: 'Can I run ssh-keygen in Command Prompt instead of PowerShell?',
+    a: 'Yes, the command is the same. Only the helper commands differ, such as <code>type</code> and <code>clip</code> instead of <code>Get-Content</code> and <code>Set-Clipboard</code>, and <code>%USERPROFILE%</code> instead of <code>$env:USERPROFILE</code>.',
+  },
+  {
+    q: 'Why does ssh-add say "Error connecting to agent: No such file or directory"?',
+    a: 'The ssh-agent service is stopped or disabled, which is the default on a fresh Windows install. In an Administrator PowerShell, set its startup type to Automatic and start it, as in step 3.',
+  },
+];
+
+const schema = [
+  howToSchema({
+    name: 'How to generate an SSH key on Windows',
+    description,
+    path,
+    totalTime: 'PT10M',
+    tools: ['PowerShell', 'OpenSSH for Windows'],
+    steps,
+  }),
+  faqSchema(faq),
+];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="Generate an SSH key on Windows"
+  heading="How to generate an SSH key on Windows"
+  lead="Windows 10 and 11 ship OpenSSH, so PuTTYgen is no longer needed. Create an Ed25519 key in PowerShell, enable ssh-agent and use the key with servers and Git."
+  updated="2026-10-09"
+  schema={schema}
+  termphinPitch="Need your servers when you are away from this PC? Termphin is an SSH client that imports the OpenSSH key you create here and keeps the session alive through a locked screen or a network switch."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> Open PowerShell, run the first command and press Enter to keep the default location.
+      The key pair is saved in <code>C:\Users\you\.ssh</code>; the second command copies the public key to the clipboard.
+    </p>
+    <pre><code>{`ssh-keygen -t ed25519 -C "you@example.com"
+Get-Content "$env:USERPROFILE\\.ssh\\id_ed25519.pub" | Set-Clipboard`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="what-and-why">Before you start</h2>
+  <p>
+    An SSH key is a pair of files. The private key stays on your PC; the public key goes to GitHub, GitLab or a server,
+    which then lets in whoever holds the private key. It replaces passwords and tokens for <code>ssh</code> and
+    <code>git</code>, and lets a server turn password logins off.
+  </p>
+  <p>
+    Windows has carried Microsoft's port of OpenSSH since Windows 10 version 1809. It is the same <code>ssh</code>,
+    <code>ssh-keygen</code> and <code>ssh-add</code> that Linux and macOS use, so keys and config files are
+    interchangeable. You do not need PuTTY, Git Bash or WSL to create a key, though all three can use it.
+  </p>
+  <p>
+    Use the <strong>Ed25519</strong> key type; it is the recommended default and every maintained service accepts it. The
+    reasons, and when RSA still matters, are in <a href="/ed25519-vs-rsa">Ed25519 vs RSA</a>.
+  </p>
+
+  <h2 id="steps">How to generate an SSH key on Windows</h2>
+  <HowToSteps steps={steps} />
+
+  <h2 id="output">What ssh-keygen prints on Windows</h2>
+  <pre><code>{`PS C:\\Users\\you> ssh-keygen -t ed25519 -C "you@example.com"
+Generating public/private ed25519 key pair.
+Enter file in which to save the key (C:\\Users\\you/.ssh/id_ed25519):
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in C:\\Users\\you/.ssh/id_ed25519
+Your public key has been saved in C:\\Users\\you/.ssh/id_ed25519.pub
+The key fingerprint is:
+SHA256:I2McFhOvOOgBGIf3aLmk0z7TTKxZoLZ32hK6Bxbk7Tw you@example.com
+The key's randomart image is:
++--[ED25519 256]--+
+|...   +.         |
+|o+.    +         |
+|=..+  o .        |
+| +*o.+ o         |
+| **+o * S        |
+|+=oE+o o .       |
+|oo=Bo            |
+| o*++.           |
+| .+++.           |
++----[SHA256]-----+`}</code></pre>
+  <p>
+    The mixed slashes in the path are normal for the Windows port. Nothing appears while you type the passphrase. If the
+    file already exists, ssh-keygen asks <code>Overwrite (y/n)?</code>: answer <code>n</code> unless you mean to replace
+    a key that servers already trust. The fingerprint at the end identifies the key; see
+    <a href="/ssh-key-fingerprint">SSH key fingerprints</a>.
+  </p>
+
+  <h2 id="where">Where Windows stores SSH keys</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>File</th><th>What it is</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>C:\Users\&lt;you&gt;\.ssh\id_ed25519</code></td><td>Private key. Never share or upload it.</td></tr>
+        <tr><td><code>C:\Users\&lt;you&gt;\.ssh\id_ed25519.pub</code></td><td>Public key, one line starting with <code>ssh-ed25519</code>.</td></tr>
+        <tr><td><code>C:\Users\&lt;you&gt;\.ssh\config</code></td><td>Optional per-host settings.</td></tr>
+        <tr><td><code>C:\Users\&lt;you&gt;\.ssh\known_hosts</code></td><td>Host keys of servers you have connected to.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    <code>$env:USERPROFILE</code> in PowerShell and <code>%USERPROFILE%</code> in Command Prompt both point at
+    <code>C:\Users\&lt;you&gt;</code>, and <code>~</code> works in ssh's own config. Explorer shows the folder with
+    <code>explorer "$env:USERPROFILE\.ssh"</code>.
+  </p>
+
+  <h2 id="agent">The ssh-agent service</h2>
+  <p>
+    On Windows, ssh-agent is a system service, not a program you start per window. Once enabled (step 3) it runs at boot,
+    and keys added with <code>ssh-add</code> are stored for your account and survive restarts. That differs from Linux
+    and macOS, where the agent forgets keys at logout.
+  </p>
+  <pre><code>{`Get-Service ssh-agent          # Status should be Running, StartType Automatic
+ssh-add -l                     # list loaded keys
+ssh-add -d "$env:USERPROFILE\\.ssh\\id_ed25519"   # remove one key
+ssh-add -D                     # remove all keys`}</code></pre>
+  <p>
+    Because the agent remembers keys indefinitely, anyone signed in to your Windows account can use them. Lock the PC
+    when you leave it, and see <a href="/ssh-key-passphrase">SSH key passphrases</a> for agent lifetimes.
+  </p>
+
+  <h2 id="permissions">Fixing "Bad permissions" on the private key</h2>
+  <p>
+    OpenSSH refuses a private key other accounts can read (<code>WARNING: UNPROTECTED PRIVATE KEY FILE!</code>).
+    Downloaded or copied files may inherit broad permissions. Grant access to your account only:
+  </p>
+  <pre><code>{`icacls "$env:USERPROFILE\\.ssh\\id_ed25519" /inheritance:r /grant:r "$($env:USERNAME):F"`}</code></pre>
+  <p>
+    <code>/inheritance:r</code> removes the permissions copied from the parent folder and <code>/grant:r</code> leaves
+    full control to you alone. Running <code>icacls</code> on the file without options lists who has access. The same
+    command fixes a config file that ssh rejects.
+  </p>
+  <p>
+    You can also generate a key in your browser with the <a href="/">sshkeygen.dev generator</a>; its downloads need
+    this fix. Move both files into <code>.ssh</code> first:
+  </p>
+  <pre><code>{`New-Item -ItemType Directory -Force "$env:USERPROFILE\\.ssh" | Out-Null
+Move-Item "$env:USERPROFILE\\Downloads\\id_ed25519" "$env:USERPROFILE\\.ssh\\"
+Move-Item "$env:USERPROFILE\\Downloads\\id_ed25519.pub" "$env:USERPROFILE\\.ssh\\"`}</code></pre>
+
+  <h2 id="git">Making Git use the Windows agent</h2>
+  <p>
+    Git for Windows bundles its own OpenSSH, which ignores the Windows agent, so Git keeps asking for the passphrase.
+    Point Git at the system client once:
+  </p>
+  <pre><code>{`git config --global core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe"`}</code></pre>
+  <p>
+    Then test with <code>ssh -T git@github.com</code>. A working key answers
+    <code>Hi your-username! You've successfully authenticated, but GitHub does not provide shell access.</code> Adding the
+    key to your account is covered in <a href="/ssh-key-for-github">SSH key for GitHub</a>.
+  </p>
+  <p>
+    Inside Git Bash itself, <code>ssh</code> is Git's copy. It reads the same <code>~/.ssh</code> folder but needs its own
+    agent: run <code>eval "$(ssh-agent -s)"</code> and <code>ssh-add</code> in that window.
+  </p>
+
+  <h2 id="config">An ssh config file on Windows</h2>
+  <p>
+    The client reads <code>%USERPROFILE%\.ssh\config</code>, with the usual syntax:
+  </p>
+  <pre><code>{`Host web
+  HostName 203.0.113.10
+  User deploy
+  Port 22
+  IdentityFile ~/.ssh/id_ed25519
+
+Host github-work
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_work
+  IdentitiesOnly yes`}</code></pre>
+  <p>
+    Now <code>ssh web</code> is enough. The tilde works on Windows too and means your profile folder. The second block
+    lets a second key, made with <code>ssh-keygen -t ed25519 -f "$env:USERPROFILE\.ssh\id_ed25519_work"</code>, serve a
+    second GitHub account: clone with <code>git@github-work:company/repo.git</code>. Save the file without an extension;
+    Notepad adds <code>.txt</code> unless you choose "All files".
+  </p>
+
+  <h2 id="putty">PuTTY, WSL and other tools</h2>
+  <ul>
+    <li>
+      <strong>PuTTY and WinSCP</strong> use their own <code>.ppk</code> format. Open PuTTYgen, choose Conversions,
+      Import key, select <code>id_ed25519</code>, then Save private key. The OpenSSH key itself stays as it is.
+    </li>
+    <li>
+      <strong>From .ppk to OpenSSH</strong>: load the <code>.ppk</code> in PuTTYgen and choose Conversions, Export
+      OpenSSH key. The public key line shown in PuTTYgen's window is already in the format servers and GitHub expect.
+    </li>
+    <li>
+      <strong>WSL</strong> distributions have their own Linux home folder with a separate <code>~/.ssh</code>. Either
+      generate a key inside WSL, following the <a href="/generate-ssh-key-linux">Linux guide</a>, or copy the Windows
+      key in and fix its mode, since files under <code>/mnt/c</code> appear world-readable:
+      <code>cp /mnt/c/Users/you/.ssh/id_ed25519* ~/.ssh/ &amp;&amp; chmod 600 ~/.ssh/id_ed25519</code>.
+    </li>
+    <li>
+      <strong>Windows Terminal and VS Code</strong> use the system OpenSSH, so the agent and config above apply to them
+      directly.
+    </li>
+  </ul>
+
+  <h2 id="windows-server">Keys for a Windows OpenSSH server</h2>
+  <p>
+    If the machine you connect <em>to</em> runs Windows with OpenSSH Server, a standard user's keys go in
+    <code>C:\Users\&lt;user&gt;\.ssh\authorized_keys</code>. For members of the Administrators group, sshd reads
+    <code>C:\ProgramData\ssh\administrators_authorized_keys</code> instead, and only if Administrators and SYSTEM alone
+    can access it:
+  </p>
+  <pre><code>{`icacls.exe "C:\\ProgramData\\ssh\\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"`}</code></pre>
+  <p>
+    Putting an administrator's key in their own <code>authorized_keys</code> is the most common reason key login fails on
+    a Windows server. For Linux servers, see <a href="/add-ssh-key-to-server">adding a key to a server</a>.
+  </p>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <h3>"Error connecting to agent: No such file or directory"</h3>
+  <p>
+    The ssh-agent service is not running. Repeat step 3 as Administrator.
+  </p>
+  <h3>"Permission denied (publickey)"</h3>
+  <p>
+    Run <code>ssh -v user@host</code> to see which keys are tried. On a Windows server, administrators' keys go in
+    <code>C:\ProgramData\ssh\administrators_authorized_keys</code>. More in
+    <a href="/add-ssh-key-to-server">adding a key to a server</a>.
+  </p>
+  <h3>"WARNING: UNPROTECTED PRIVATE KEY FILE!"</h3>
+  <p>
+    Other accounts can read the key file. Run the <code>icacls</code> command from
+    <a href="#permissions">the permissions section</a>, then try again.
+  </p>
+  <h3>"Bad owner or permissions on C:\\Users\\you/.ssh/config"</h3>
+  <p>
+    The config file is writable by other accounts, often because it was created by an elevated process or copied from
+    elsewhere. Apply the same <code>icacls</code> command to <code>$env:USERPROFILE\.ssh\config</code>.
+  </p>
+  <h3>"Could not open a connection to your authentication agent"</h3>
+  <p>
+    You are in Git Bash or WSL, where the Windows service is not visible. Start an agent in that shell with
+    <code>eval "$(ssh-agent -s)"</code>, or use PowerShell.
+  </p>
+  <h3>"Host key verification failed"</h3>
+  <p>
+    The server's host key differs from the one in <code>known_hosts</code>. After confirming the new fingerprint with the
+    server's owner, remove the old entry with <code>ssh-keygen -R host</code> and connect again.
+  </p>
+  <h3>"no matching host key type found. Their offer: ssh-rsa"</h3>
+  <p>
+    The server only supports the SHA-1 RSA signature that current OpenSSH disables. Update the server, or for that host
+    only add <code>HostKeyAlgorithms +ssh-rsa</code> and <code>PubkeyAcceptedAlgorithms +ssh-rsa</code> to its block in
+    the config file.
+  </p>
+  <h3>"ssh-keygen is not recognized"</h3>
+  <p>The OpenSSH client feature is not installed. See step 1.</p>
+
+  <Faq items={faq} />
+</Article>

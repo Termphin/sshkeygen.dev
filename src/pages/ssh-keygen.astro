@@ -1,0 +1,416 @@
+---
+import Article from '../layouts/Article.astro';
+import Faq from '../components/Faq.astro';
+import { faqSchema } from '../data/howto';
+
+const path = '/ssh-keygen';
+const title = 'ssh-keygen Command: Options, Examples and Cheat Sheet';
+const description =
+  'ssh-keygen cheat sheet: every common flag explained with examples, from -t and -b to -p, -l, -y, -R, -m PEM and certificates. For OpenSSH 8, 9 and 10.';
+
+const toc = [
+  { id: 'quick', label: 'The commands you need most' },
+  { id: 'options', label: 'Options' },
+  { id: 'create', label: 'Generate keys' },
+  { id: 'manage', label: 'Change the passphrase and comment' },
+  { id: 'public-from-private', label: 'Read the public key from a private key' },
+  { id: 'fingerprints', label: 'Fingerprints and randomart' },
+  { id: 'convert', label: 'Convert formats: PEM, PKCS8, RFC 4716' },
+  { id: 'known-hosts', label: 'Work with known_hosts' },
+  { id: 'signing', label: 'Sign and verify files and commits' },
+  { id: 'certificates', label: 'SSH certificates' },
+  { id: 'krl', label: 'Revoke keys with a KRL' },
+  { id: 'fido', label: 'FIDO2 security keys' },
+  { id: 'host-keys', label: 'Host keys and SSHFP records' },
+  { id: 'moduli', label: 'Moduli for Diffie-Hellman group exchange' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const flags: { flag: string; meaning: string }[] = [
+  { flag: '-t type', meaning: 'Key type: <code>ed25519</code>, <code>rsa</code>, <code>ecdsa</code>, or <code>ed25519-sk</code> / <code>ecdsa-sk</code> for FIDO2 hardware keys. Default <code>ed25519</code> in OpenSSH 9.5 and later, <code>rsa</code> before.' },
+  { flag: '-b bits', meaning: 'Key size. RSA: 3072 by default, 2048 minimum in practice, 4096 common. ECDSA: 256, 384 or 521. Ignored for Ed25519.' },
+  { flag: '-C comment', meaning: 'Comment stored with the key and appended to the public key line, usually an email or <code>user@host</code>.' },
+  { flag: '-f file', meaning: 'Key file to create or operate on. The public key is written to the same name plus <code>.pub</code>.' },
+  { flag: '-N passphrase', meaning: 'New passphrase, non-interactively. <code>-N ""</code> creates an unencrypted key.' },
+  { flag: '-P passphrase', meaning: 'Old passphrase, for <code>-p</code> and for reading encrypted keys in scripts.' },
+  { flag: '-a rounds', meaning: 'bcrypt_pbkdf rounds used to encrypt the private key. Default 16; higher is slower to unlock and to brute-force.' },
+  { flag: '-Z cipher', meaning: 'Cipher that encrypts the private key file. Default <code>aes256-ctr</code>; <code>ssh -Q cipher</code> lists the alternatives.' },
+  { flag: '-p', meaning: 'Change, add or remove the passphrase of an existing key, without changing the key.' },
+  { flag: '-c', meaning: 'Change the comment of an existing key, together with <code>-C</code>.' },
+  { flag: '-l', meaning: 'Print the fingerprint of a key file, <code>authorized_keys</code> or <code>known_hosts</code>.' },
+  { flag: '-E hash', meaning: 'Fingerprint hash for <code>-l</code>: <code>sha256</code> (default) or <code>md5</code>.' },
+  { flag: '-B', meaning: 'Print the bubblebabble digest of a key, an older pronounceable fingerprint format.' },
+  { flag: '-v', meaning: 'Verbose. With <code>-l</code>, also draws the randomart image.' },
+  { flag: '-y', meaning: 'Read a private key and print its public key, to recreate a lost <code>.pub</code> file.' },
+  { flag: '-e', meaning: 'Export a key to another format, by default RFC 4716 (SSH2) used by some commercial SSH servers.' },
+  { flag: '-i', meaning: 'Import a key from RFC 4716 or PKCS8 format into OpenSSH format.' },
+  { flag: '-m format', meaning: 'Format for <code>-e</code>, <code>-i</code> and new private keys: <code>RFC4716</code>, <code>PKCS8</code> or <code>PEM</code>.' },
+  { flag: '-q', meaning: 'Quiet. Suppresses the progress output and randomart, for scripts.' },
+  { flag: '-R host', meaning: 'Remove all keys for a host from <code>known_hosts</code>.' },
+  { flag: '-F host', meaning: 'Find a host in <code>known_hosts</code>, also in hashed files.' },
+  { flag: '-H', meaning: 'Hash every host name in <code>known_hosts</code>, so the file does not reveal where you connect.' },
+  { flag: '-A', meaning: 'Create any missing host keys in <code>/etc/ssh</code> with default settings, as installers do.' },
+  { flag: '-r host', meaning: 'Print SSHFP DNS records for a public key, for publishing host key fingerprints.' },
+  { flag: '-O option', meaning: 'Extra options, for example <code>resident</code> and <code>verify-required</code> for FIDO keys, or certificate options with <code>-s</code>.' },
+  { flag: '-K', meaning: 'Download resident keys from a connected FIDO2 authenticator into the current folder.' },
+  { flag: '-w provider', meaning: 'Use a different FIDO middleware library instead of the built-in one.' },
+  { flag: '-D pkcs11', meaning: 'Print the public keys held on a PKCS#11 token such as a smart card, via its library.' },
+  { flag: '-s ca_key', meaning: 'Sign a public key with a CA key to create a certificate. Used with <code>-I</code>, <code>-n</code> and <code>-V</code>.' },
+  { flag: '-I id', meaning: 'Key identity recorded in a certificate and in server logs.' },
+  { flag: '-n principals', meaning: 'Users (or, with <code>-h</code>, host names) a certificate is valid for, comma separated.' },
+  { flag: '-V interval', meaning: 'Certificate validity, for example <code>+52w</code> or <code>20260101:20270101</code>.' },
+  { flag: '-z serial', meaning: 'Serial number embedded in a certificate, so it can be revoked individually.' },
+  { flag: '-h', meaning: 'Create a host certificate instead of a user certificate.' },
+  { flag: '-U', meaning: 'The CA key for <code>-s</code> or <code>-Y sign</code> lives in ssh-agent; pass its public key to <code>-s</code>.' },
+  { flag: '-L', meaning: 'Print the contents of a certificate.' },
+  { flag: '-k', meaning: 'Create a key revocation list (KRL); <code>-u</code> updates an existing one.' },
+  { flag: '-Q', meaning: 'Test whether keys are listed in a KRL.' },
+  { flag: '-Y op', meaning: 'Sign or verify arbitrary data: <code>sign</code>, <code>verify</code>, <code>find-principals</code>, <code>check-novalidate</code>.' },
+  { flag: '-M op', meaning: 'Generate (<code>generate</code>) or test (<code>screen</code>) Diffie-Hellman group exchange moduli.' },
+];
+
+const faq = [
+  {
+    q: 'What does ssh-keygen do without any options?',
+    a: 'It creates a new key pair interactively, asking for a file name and a passphrase. On OpenSSH 9.5 and later the type is Ed25519, saved as <code>~/.ssh/id_ed25519</code>; older versions create an RSA key. Passing <code>-t ed25519</code> makes the result the same everywhere.',
+  },
+  {
+    q: 'How do I generate a key without any prompts?',
+    a: 'Give the file and the passphrase on the command line: <code>ssh-keygen -t ed25519 -f ./key -N "" -q</code>. If the file exists, ssh-keygen still asks whether to overwrite it, so remove the old file first in scripts.',
+  },
+  {
+    q: 'What is the difference between ssh-keygen -l and -y?',
+    a: '<code>-l</code> prints the short fingerprint of a key. <code>-y</code> prints the whole public key line from a private key file, which is how you rebuild a missing <code>.pub</code> file.',
+  },
+  {
+    q: 'Can ssh-keygen convert a PuTTY .ppk key?',
+    a: 'No. Use PuTTYgen: load the .ppk and export it as an OpenSSH key, or on Linux and macOS run <code>puttygen key.ppk -O private-openssh -o id_ed25519</code>. The other direction also needs PuTTYgen.',
+  },
+  {
+    q: 'What does the -o option do?',
+    a: 'It used to select the newer OpenSSH private key format. That format has been the default since OpenSSH 7.8, so <code>-o</code> is accepted but does nothing on current versions.',
+  },
+  {
+    q: 'How do I see which version of ssh-keygen I have?',
+    a: 'ssh-keygen has no version flag; <code>-V</code> sets a certificate\'s validity. Run <code>ssh -V</code>, since ssh and ssh-keygen come from the same OpenSSH release.',
+  },
+  {
+    q: 'Does ssh-keygen need root?',
+    a: 'Only to write files that root owns, such as host keys in <code>/etc/ssh</code>. Personal keys, fingerprints, conversions and known_hosts edits run as your own user.',
+  },
+];
+
+const schema = [faqSchema(faq)];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="ssh-keygen reference"
+  heading="ssh-keygen command reference and cheat sheet"
+  lead="ssh-keygen creates, converts and inspects SSH keys, and manages known_hosts and certificates. The options you will actually use, with examples."
+  updated="2026-10-09"
+  schema={schema}
+  termphinPitch="Done with ssh-keygen? Termphin is an SSH client that imports the keys it writes, passphrase included, and keeps your sessions alive through a locked screen or a network switch."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> <code>ssh-keygen -t ed25519 -C "you@example.com"</code> creates a new key pair in
+      <code>~/.ssh</code>. <code>-p</code> changes its passphrase, <code>-l</code> shows its fingerprint and
+      <code>-R</code> forgets a server's old host key. Examples for each follow.
+    </p>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="quick">The commands you need most</h2>
+  <pre><code>{`ssh-keygen -t ed25519 -C "you@example.com"     # create a new key (recommended)
+ssh-keygen -t rsa -b 4096 -C "you@example.com"  # RSA, for systems without Ed25519
+ssh-keygen -p -f ~/.ssh/id_ed25519              # change the passphrase
+ssh-keygen -lf ~/.ssh/id_ed25519.pub            # show the fingerprint
+ssh-keygen -y -f ~/.ssh/id_ed25519              # print the public key
+ssh-keygen -R example.com                       # forget a host's old key`}</code></pre>
+
+  <h2 id="options">Options</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Flag</th><th>What it does</th></tr>
+      </thead>
+      <tbody>
+        {flags.map((row) => <tr><td><code>{row.flag}</code></td><td set:html={row.meaning} /></tr>)}
+      </tbody>
+    </table>
+  </div>
+  <p>
+    The full list is in <code>man ssh-keygen</code>. <code>-o</code> from older guides has been the default since
+    OpenSSH 7.8.
+  </p>
+
+  <h2 id="create">Generate keys</h2>
+  <h3>A standard key with a passphrase</h3>
+  <pre><code>{`ssh-keygen -t ed25519 -C "you@example.com"`}</code></pre>
+  <p>
+    It asks for a file name (Enter keeps <code>~/.ssh/id_ed25519</code>) and a passphrase. On OpenSSH 10 the session
+    looks like this:
+  </p>
+  <pre><code>{`Generating public/private ed25519 key pair.
+Enter file in which to save the key (/home/you/.ssh/id_ed25519):
+Enter passphrase for "/home/you/.ssh/id_ed25519" (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /home/you/.ssh/id_ed25519
+Your public key has been saved in /home/you/.ssh/id_ed25519.pub
+The key fingerprint is:
+SHA256:I2McFhOvOOgBGIf3aLmk0z7TTKxZoLZ32hK6Bxbk7Tw you@example.com`}</code></pre>
+  <p>
+    Which type to choose is covered in <a href="/ed25519-vs-rsa">Ed25519 vs RSA vs ECDSA</a>; platform walkthroughs
+    are in the <a href="/generate-ssh-key-linux">Linux</a>, <a href="/generate-ssh-key-mac">macOS</a> and
+    <a href="/generate-ssh-key-windows">Windows</a> guides.
+  </p>
+  <h3>RSA and ECDSA keys</h3>
+  <pre><code>{`ssh-keygen -t rsa -b 4096 -C "you@example.com"
+ssh-keygen -t ecdsa -b 384 -C "you@example.com"`}</code></pre>
+  <h3>A second key under its own name</h3>
+  <pre><code>{`ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_work -C "you@company.com"`}</code></pre>
+  <h3>A key for automation, without a passphrase</h3>
+  <pre><code>{`ssh-keygen -t ed25519 -N "" -q -f ./deploy_key -C "deploy@ci"`}</code></pre>
+  <p>
+    Non-interactive, for CI. Restrict the key with <code>command=</code> and <code>from=</code> in
+    <a href="/add-ssh-key-to-server">authorized_keys</a>.
+  </p>
+  <h3>A stronger passphrase derivation</h3>
+  <pre><code>{`ssh-keygen -t ed25519 -a 64 -C "you@example.com"`}</code></pre>
+  <p>
+    More rounds make every unlock, and every guess by an attacker who stole the file, slower. See
+    <a href="/ssh-key-passphrase#kdf-rounds">KDF rounds</a>.
+  </p>
+  <h3>A key in the legacy PEM format</h3>
+  <pre><code>{`ssh-keygen -t rsa -b 4096 -m PEM -f ./legacy_key`}</code></pre>
+  <p>
+    Only for software that cannot read the OpenSSH format. PEM private keys are weaker at rest, so convert back when you
+    can.
+  </p>
+
+  <h2 id="manage">Change the passphrase and comment</h2>
+  <h3>Change, add or remove the passphrase</h3>
+  <pre><code>{`ssh-keygen -p -f ~/.ssh/id_ed25519`}</code></pre>
+  <p>
+    The key and fingerprint stay the same. An empty new passphrase removes protection. In scripts, pass both with
+    <code>-P "old" -N "new"</code>, and raise the KDF rounds at the same time with <code>-a</code>.
+  </p>
+  <h3>Change the comment</h3>
+  <pre><code>{`$ ssh-keygen -c -C "new comment" -f ~/.ssh/id_ed25519
+Old comment: you@example.com
+Comment 'new comment' applied`}</code></pre>
+  <p>
+    The comment is only a label; servers ignore it. Changing it also rewrites the <code>.pub</code> file, but copies of
+    the public key already installed elsewhere keep the old comment.
+  </p>
+
+  <h2 id="public-from-private">Read the public key from a private key</h2>
+  <pre><code>{`ssh-keygen -y -f ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.pub`}</code></pre>
+  <p>
+    Recreates a lost or damaged <code>.pub</code> file. For an encrypted key it asks for the passphrase. It is also the
+    surest way to check that a private and a public key belong together: compare the output with the
+    <code>.pub</code> file.
+  </p>
+
+  <h2 id="fingerprints">Fingerprints and randomart</h2>
+  <pre><code>{`$ ssh-keygen -lf ~/.ssh/id_ed25519.pub
+256 SHA256:I2McFhOvOOgBGIf3aLmk0z7TTKxZoLZ32hK6Bxbk7Tw you@example.com (ED25519)
+
+$ ssh-keygen -E md5 -lf ~/.ssh/id_ed25519.pub
+256 MD5:b5:23:6d:0b:dc:ac:67:62:85:a1:dd:80:15:4c:52:2c you@example.com (ED25519)
+
+$ ssh-keygen -lvf ~/.ssh/id_ed25519.pub`}</code></pre>
+  <p>
+    <code>-l</code> also reads <code>authorized_keys</code> and <code>known_hosts</code>, one line of output per key, and
+    standard input with <code>-f -</code>. Everything about fingerprints is in
+    <a href="/ssh-key-fingerprint">SSH key fingerprints</a>.
+  </p>
+
+  <h2 id="convert">Convert formats: PEM, PKCS8, RFC 4716</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Format</th><th>Looks like</th><th>Used by</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>OpenSSH private</td><td><code>-----BEGIN OPENSSH PRIVATE KEY-----</code></td><td>Current OpenSSH, the default</td></tr>
+        <tr><td>OpenSSH public</td><td><code>ssh-ed25519 AAAA... comment</code></td><td>authorized_keys, GitHub, every SSH server</td></tr>
+        <tr><td>PEM</td><td><code>-----BEGIN RSA PRIVATE KEY-----</code></td><td>Older tools and libraries</td></tr>
+        <tr><td>PKCS8</td><td><code>-----BEGIN PUBLIC KEY-----</code></td><td>OpenSSL and TLS tooling</td></tr>
+        <tr><td>RFC 4716</td><td><code>---- BEGIN SSH2 PUBLIC KEY ----</code></td><td>Some commercial SSH servers and appliances</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Rewrite a private key in the old PEM format</h3>
+  <pre><code>{`ssh-keygen -p -m PEM -f ~/.ssh/id_rsa`}</code></pre>
+  <p>
+    For old tools that only read <code>-----BEGIN RSA PRIVATE KEY-----</code>. This rewrites the key in place, so copy
+    it first. Running <code>ssh-keygen -p</code> without <code>-m</code> converts it back to the OpenSSH format.
+  </p>
+  <h3>Export a public key as RFC 4716 or PKCS8</h3>
+  <pre><code>{`$ ssh-keygen -e -f ~/.ssh/id_ed25519.pub
+---- BEGIN SSH2 PUBLIC KEY ----
+Comment: "256-bit ED25519, converted by you@laptop from OpenSSH"
+AAAAC3NzaC1lZDI1NTE5AAAAICjC3B8SRdvp0H36PKIVoOSLOR8PA2GXw+6tRPH+FQ0z
+---- END SSH2 PUBLIC KEY ----
+
+$ ssh-keygen -e -m PKCS8 -f ~/.ssh/id_rsa.pub`}</code></pre>
+  <h3>Import an RFC 4716 or PKCS8 public key</h3>
+  <pre><code>{`ssh-keygen -i -f key_from_vendor.pub >> ~/.ssh/authorized_keys
+ssh-keygen -i -m PKCS8 -f public.pem`}</code></pre>
+
+  <h2 id="known-hosts">Work with known_hosts</h2>
+  <pre><code>{`ssh-keygen -F example.com         # show stored keys for a host
+ssh-keygen -R example.com         # remove them after a legitimate key change
+ssh-keygen -R "[example.com]:2222" # a host on a non-standard port
+ssh-keygen -H                     # hash every host name in the file`}</code></pre>
+  <p>
+    <code>-R</code> and <code>-H</code> keep the previous version as <code>known_hosts.old</code>. After <code>-H</code>,
+    delete that file, since it still contains the readable names. Use <code>-f</code> to work on a file other than
+    <code>~/.ssh/known_hosts</code>.
+  </p>
+
+  <h2 id="signing">Sign and verify files and commits</h2>
+  <p>
+    Since OpenSSH 8.1, ssh-keygen signs arbitrary data. Git uses this for
+    <a href="/ssh-key-for-github#signing">commit signing</a>.
+  </p>
+  <pre><code>{`ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n file release.tar.gz
+ssh-keygen -Y verify -f allowed_signers -I you@example.com -n file -s release.tar.gz.sig < release.tar.gz`}</code></pre>
+  <p>
+    The first command writes <code>release.tar.gz.sig</code>. The <code>allowed_signers</code> file lists trusted keys,
+    one per line, as <code>you@example.com ssh-ed25519 AAAA...</code>. A good signature prints:
+  </p>
+  <pre><code>{`Good "file" signature for you@example.com with ED25519 key SHA256:I2McFhOvOOgBGIf3aLmk0z7TTKxZoLZ32hK6Bxbk7Tw`}</code></pre>
+  <ul>
+    <li>
+      <code>-n</code> is the <strong>namespace</strong>. A signature made for one namespace does not verify in another,
+      so a file signature cannot be passed off as a git signature. Git uses <code>git</code>.
+    </li>
+    <li><code>-Y find-principals -s file.sig -f allowed_signers</code> tells you who made a signature.</li>
+    <li><code>-Y check-novalidate -n file -s file.sig &lt; file</code> checks that a signature is intact without deciding whether the signer is trusted.</li>
+  </ul>
+
+  <h2 id="certificates">SSH certificates</h2>
+  <p>
+    A CA key signs user keys with an expiry date, and servers trust the CA with one <code>TrustedUserCAKeys</code> line
+    in <code>sshd_config</code>. No more copying public keys to every server, and access ends by itself when the
+    certificate expires.
+  </p>
+  <h3>User certificates</h3>
+  <pre><code>{`ssh-keygen -t ed25519 -f ca_user_key -C "user CA"
+ssh-keygen -s ca_user_key -I alice -n alice,deploy -V +8h ~/.ssh/id_ed25519.pub
+ssh-keygen -L -f ~/.ssh/id_ed25519-cert.pub`}</code></pre>
+  <p>
+    The second command writes <code>id_ed25519-cert.pub</code>, valid for eight hours as users alice and deploy. ssh
+    picks it up automatically next to the key. <code>-L</code> shows what is inside:
+  </p>
+  <pre><code>{`        Type: ssh-ed25519-cert-v01@openssh.com user certificate
+        Public key: ED25519-CERT SHA256:I2McFhOvOOgBGIf3aLmk0z7TTKxZoLZ32hK6Bxbk7Tw
+        Signing CA: ED25519 SHA256:upxCLwGfORW/m0nebVB5eDsOeF4LgBghrwbM7m6TqL8 (using ssh-ed25519)
+        Key ID: "alice"
+        Serial: 0
+        Valid: from 2026-10-09T05:42:00 to 2026-10-09T13:43:09
+        Principals:
+                alice
+                deploy
+        Critical Options: (none)
+        Extensions:
+                permit-X11-forwarding
+                permit-agent-forwarding
+                permit-port-forwarding
+                permit-pty
+                permit-user-rc`}</code></pre>
+  <p>
+    Restrict a certificate with <code>-O</code>: <code>-O force-command=/usr/local/bin/backup</code>,
+    <code>-O source-address=203.0.113.0/24</code>, or <code>-O clear</code> to drop all the permit extensions and add
+    back only what is needed, such as <code>-O permit-pty</code>. On the server:
+  </p>
+  <pre><code>{`TrustedUserCAKeys /etc/ssh/user_ca.pub`}</code></pre>
+  <h3>Host certificates</h3>
+  <p>
+    The CA can also sign host keys, so clients trust every server it signed without the first-connection prompt:
+  </p>
+  <pre><code>{`ssh-keygen -s ca_host_key -h -I web01 -n web01.example.com -V +52w /etc/ssh/ssh_host_ed25519_key.pub`}</code></pre>
+  <p>
+    Point sshd at the result with <code>HostCertificate /etc/ssh/ssh_host_ed25519_key-cert.pub</code>, and add one line
+    to the clients' <code>known_hosts</code>: <code>@cert-authority *.example.com ssh-ed25519 AAAA...</code> with the
+    host CA's public key.
+  </p>
+
+  <h2 id="krl">Revoke keys with a KRL</h2>
+  <p>
+    A key revocation list is a compact file of keys and certificates sshd must refuse, useful when a key you cannot delete
+    from every <code>authorized_keys</code> leaks, or for revoking certificates before they expire.
+  </p>
+  <pre><code>{`ssh-keygen -k -f /etc/ssh/revoked_keys stolen_key.pub
+ssh-keygen -k -u -f /etc/ssh/revoked_keys another_key.pub
+ssh-keygen -Q -f /etc/ssh/revoked_keys suspect_key.pub`}</code></pre>
+  <p>
+    The first creates the list, the second adds to it, the third checks a key against it. Enable it with
+    <code>RevokedKeys /etc/ssh/revoked_keys</code> in <code>sshd_config</code>.
+  </p>
+
+  <h2 id="fido">FIDO2 security keys</h2>
+  <pre><code>{`ssh-keygen -t ed25519-sk -O resident -O verify-required -C "yubikey"`}</code></pre>
+  <p>
+    The key lives on the token. <code>resident</code> lets <code>ssh-keygen -K</code> fetch it on another computer;
+    <code>verify-required</code> asks for the PIN as well as a touch. Needs OpenSSH 8.2 on both ends.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Option</th><th>Effect</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>-O resident</code></td><td>Store the key handle on the token, so it can be recovered with <code>-K</code>.</td></tr>
+        <tr><td><code>-O verify-required</code></td><td>Require the token's PIN or biometric check on every use.</td></tr>
+        <tr><td><code>-O application=ssh:name</code></td><td>Keep several resident keys apart on one token. Must start with <code>ssh:</code>.</td></tr>
+        <tr><td><code>-O no-touch-required</code></td><td>Allow use without a touch. The server must also allow it with <code>no-touch-required</code> in <code>authorized_keys</code>.</td></tr>
+        <tr><td><code>-O user=name</code></td><td>User name stored with a resident key.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <pre><code>{`cd ~/.ssh && ssh-keygen -K`}</code></pre>
+  <p>
+    Downloads the resident keys from a connected token as key files in the current folder. If your token lacks Ed25519
+    support, use <code>-t ecdsa-sk</code>.
+  </p>
+
+  <h2 id="host-keys">Host keys and SSHFP records</h2>
+  <pre><code>{`sudo ssh-keygen -A
+ssh-keygen -r host.example.com -f /etc/ssh/ssh_host_ed25519_key.pub`}</code></pre>
+  <p>
+    <code>-A</code> creates any missing host keys in <code>/etc/ssh</code> with an empty passphrase, which is what
+    package installers run. <code>-r</code> prints SSHFP records for publishing the host key fingerprint in DNS. To give a
+    reinstalled server a fresh identity, delete its <code>ssh_host_*</code> files, run <code>ssh-keygen -A</code> and
+    restart sshd; clients will then see the host-key-changed warning.
+  </p>
+
+  <h2 id="moduli">Moduli for Diffie-Hellman group exchange</h2>
+  <p>
+    <code>/etc/ssh/moduli</code> holds the prime groups sshd uses for the <code>diffie-hellman-group-exchange</code> key
+    exchange. Current clients and servers usually agree on curve25519 or a post-quantum hybrid instead, so this matters
+    only for old clients. Generating your own is a two-step job that takes hours:
+  </p>
+  <pre><code>{`ssh-keygen -M generate -O bits=3072 moduli-3072.candidates
+ssh-keygen -M screen -f moduli-3072.candidates moduli-3072`}</code></pre>
+  <p>
+    A common hardening step is simpler: drop the short groups from the shipped file with
+    <code>awk '$5 >= 3071' /etc/ssh/moduli</code>, written to a new file that then replaces the original.
+  </p>
+
+  <h2 id="no-terminal">No terminal at hand?</h2>
+  <p>The <a href="/">sshkeygen.dev generator</a> writes the same key files in your browser.</p>
+
+  <Faq items={faq} />
+</Article>

@@ -1,0 +1,323 @@
+---
+import '../styles/tool.css';
+import Article from '../layouts/Article.astro';
+import Faq from '../components/Faq.astro';
+import FingerprintCheck from '../components/FingerprintCheck.svelte';
+import { faqSchema } from '../data/howto';
+
+const path = '/ssh-key-fingerprint';
+const title = 'SSH Key Fingerprint: What It Is and How to Check It';
+const description =
+  'What an SSH key fingerprint is, SHA256 vs MD5 formats, and how to check one with ssh-keygen -lf, for your own keys, authorized_keys and server host keys.';
+
+const toc = [
+  { id: 'check', label: 'Check a public key now' },
+  { id: 'what', label: 'What a fingerprint is' },
+  { id: 'sha256-vs-md5', label: 'SHA256 vs MD5 fingerprints' },
+  { id: 'commands', label: 'Checking fingerprints with ssh-keygen' },
+  { id: 'host-keys', label: 'Verifying a server\'s host key' },
+  { id: 'known-hosts', label: 'known_hosts: where accepted keys live' },
+  { id: 'changed', label: '"REMOTE HOST IDENTIFICATION HAS CHANGED"' },
+  { id: 'randomart', label: 'Randomart and VisualHostKey' },
+  { id: 'sshfp', label: 'Publishing fingerprints in DNS (SSHFP)' },
+  { id: 'github', label: 'Matching keys on GitHub, GitLab and cloud panels' },
+  { id: 'troubleshooting', label: 'Troubleshooting' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const faq = [
+  {
+    q: 'Is it safe to share an SSH key fingerprint?',
+    a: 'Yes. A fingerprint is a hash of the public key, which is public anyway. It cannot be turned back into either key. Sharing it is exactly how you let someone check that they have the right key.',
+  },
+  {
+    q: 'Why is my fingerprint different from the one shown on a website?',
+    a: 'Usually the hash differs, not the key: one side shows SHA256 and the other MD5. Run <code>ssh-keygen -E md5 -lf key.pub</code> to get the MD5 form. If both use the same hash and still differ, it is a different key.',
+  },
+  {
+    q: 'Does the fingerprint change if I change the passphrase or comment?',
+    a: 'No. The fingerprint is computed from the public key alone. A new passphrase, a new comment or a new file name leave it unchanged; only a new key changes it.',
+  },
+  {
+    q: 'Can I get the fingerprint from the private key?',
+    a: 'Yes. <code>ssh-keygen -lf ~/.ssh/id_ed25519</code> works on the private key file too, without the passphrase, because OpenSSH stores the public key unencrypted inside it. A matching pair prints the same fingerprint.',
+  },
+  {
+    q: 'What does the number at the start of ssh-keygen -l output mean?',
+    a: 'It is the key size in bits: 256 for Ed25519 and ECDSA P-256, 2048 to 4096 for RSA. The key type follows in brackets at the end of the line.',
+  },
+  {
+    q: 'Should I type yes when connecting to a server the first time?',
+    a: 'Only after checking the fingerprint against one you got another way, such as the provider\'s console, the administrator, or the published fingerprints of GitHub and similar services. Once accepted, ssh stores the key and checks it on every later connection.',
+  },
+];
+
+const schema = [faqSchema(faq)];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="SSH key fingerprint"
+  heading="SSH key fingerprints: what they are and how to check one"
+  lead="A fingerprint is a short hash that identifies a public key. Compare fingerprints to confirm that the key on GitHub is the one on your laptop, or that a server is the real one."
+  updated="2026-10-09"
+  schema={schema}
+  termphinPitch="Termphin, an SSH client, pins each server's host key and refuses to connect when it changes, instead of asking you to click through a warning."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> Run <code>ssh-keygen -lf</code> on a public key file. The output is the key size, the
+      SHA256 fingerprint, the comment and the type. Add <code>-E md5</code> for the older MD5 form.
+    </p>
+    <pre><code>{`$ ssh-keygen -lf ~/.ssh/id_ed25519.pub
+256 SHA256:I2McFhOvOOgBGIf3aLmk0z7TTKxZoLZ32hK6Bxbk7Tw you@example.com (ED25519)`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="check">Check a public key now</h2>
+  <div class="tool-embed">
+    <FingerprintCheck client:visible headingLevel={3} />
+  </div>
+
+  <h2 id="what">What a fingerprint is</h2>
+  <p>
+    Public keys are too long to compare by eye, so OpenSSH hashes them. Since OpenSSH 6.8 the default is SHA-256 in
+    base64:
+  </p>
+  <pre><code>{`256 SHA256:Fq4Ye5MxY2nI7cW8c9Bx3ZsH2WgW2yK7r1o5ZQ3hK9U you@laptop (ED25519)`}</code></pre>
+  <p>
+    That is the size in bits, the fingerprint, the comment and the type. A fingerprint comes from the public key only,
+    so it is safe to share.
+  </p>
+  <p>Fingerprints answer two everyday questions:</p>
+  <ul>
+    <li>
+      <strong>Which of my keys is this?</strong> GitHub, GitLab and <code>ssh-add -l</code> list keys by fingerprint, so
+      you can match an entry to a file on your disk and remove the right one.
+    </li>
+    <li>
+      <strong>Am I talking to the real server?</strong> On first contact ssh shows the server's host key fingerprint.
+      Comparing it with a value you got another way is what stops a man-in-the-middle.
+    </li>
+  </ul>
+  <p>
+    The hash covers the key's binary encoding, not the comment, so renaming a file or editing its comment does not change
+    the fingerprint. Neither does changing the <a href="/ssh-key-passphrase">passphrase</a>.
+  </p>
+
+  <h2 id="sha256-vs-md5">SHA256 vs MD5 fingerprints</h2>
+  <p>
+    Some older tools show the legacy <strong>MD5</strong> format, such as <code>MD5:3b:2c:8f:...</code>. Get it with
+    <code>-E md5</code>.
+  </p>
+  <pre><code>{`$ ssh-keygen -E md5 -lf ~/.ssh/id_ed25519.pub
+256 MD5:b5:23:6d:0b:dc:ac:67:62:85:a1:dd:80:15:4c:52:2c you@example.com (ED25519)`}</code></pre>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th></th><th>SHA256</th><th>MD5</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Looks like</td><td><code>SHA256:I2McFhOv...</code>, 43 base64 characters</td><td>16 hex pairs separated by colons</td></tr>
+        <tr><td>Default in OpenSSH</td><td>Since 6.8 (2015)</td><td>Before 6.8</td></tr>
+        <tr><td>Where you still see it</td><td>Everywhere current</td><td>Old servers, some appliances and older web consoles</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Both identify the same key; they are just different hashes of it, so you cannot convert one into the other. Compute
+    the form the other side shows. Older OpenSSH printed MD5 fingerprints without the <code>MD5:</code> prefix.
+  </p>
+
+  <h2 id="commands">Checking fingerprints with ssh-keygen</h2>
+  <h3>Your own key</h3>
+  <pre><code>{`ssh-keygen -lf ~/.ssh/id_ed25519.pub`}</code></pre>
+  <p>
+    Pointing <code>-f</code> at the private key works too: a matching pair prints the same fingerprint.
+  </p>
+  <h3>The legacy MD5 format</h3>
+  <pre><code>{`ssh-keygen -E md5 -lf ~/.ssh/id_ed25519.pub`}</code></pre>
+  <h3>The randomart picture</h3>
+  <pre><code>{`ssh-keygen -lvf ~/.ssh/id_ed25519.pub`}</code></pre>
+  <h3>Every key in authorized_keys</h3>
+  <pre><code>{`ssh-keygen -lf ~/.ssh/authorized_keys`}</code></pre>
+  <p>
+    One line per key: the quickest way to see who can log in before you <a href="/add-ssh-key-to-server">revoke one</a>.
+  </p>
+  <h3>Keys loaded in ssh-agent</h3>
+  <pre><code>{`ssh-add -l
+ssh-add -l -E md5`}</code></pre>
+  <h3>Every host in known_hosts</h3>
+  <pre><code>{`ssh-keygen -lf ~/.ssh/known_hosts`}</code></pre>
+  <h3>A key you received as text</h3>
+  <p>
+    Pipe it in with <code>-f -</code>, for example a colleague's key before you add it to a server:
+  </p>
+  <pre><code>{`echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... bob@laptop' | ssh-keygen -lf -`}</code></pre>
+
+  <h2 id="host-keys">Verifying a server's host key</h2>
+  <p>
+    The first time you connect to a server, ssh shows its host key fingerprint and asks whether to trust it:
+  </p>
+  <pre><code>{`The authenticity of host 'example.com (203.0.113.10)' can't be established.
+ED25519 key fingerprint is SHA256:Fq4Ye5MxY2nI7cW8c9Bx3ZsH2WgW2yK7r1o5ZQ3hK9U.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])?`}</code></pre>
+  <p>
+    Typing <code>yes</code> without checking is how man-in-the-middle attacks succeed. Compare it with the value from
+    the server's console or your provider's panel:
+  </p>
+  <pre><code>{`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`}</code></pre>
+  <p>
+    Run it on the server through a channel you already trust: the provider's web console, a KVM, or an existing session.
+    To list every host key type at once:
+  </p>
+  <pre><code>{`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$f"; done`}</code></pre>
+  <p>
+    Cloud servers built with cloud-init also print their host key fingerprints to the boot console log, which most
+    providers let you read in the web panel before you connect for the first time.
+  </p>
+  <p>
+    You can paste the expected fingerprint at the prompt and ssh compares them. GitHub's Ed25519 host key is
+    <code>SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU</code>; the others are listed in
+    <a href="/ssh-key-for-github#first-connection">SSH key for GitHub</a>.
+  </p>
+  <p>
+    <code>ssh-keyscan</code> reads a host key without logging in, but is only as trustworthy as the network:
+  </p>
+  <pre><code>{`ssh-keyscan -t ed25519 example.com | ssh-keygen -lf -`}</code></pre>
+  <p>
+    For fleets where checking by hand is impractical, <code>StrictHostKeyChecking accept-new</code> in
+    <code>~/.ssh/config</code> accepts keys of new hosts automatically but still refuses changed keys. It trusts the first
+    connection blindly, so use it only on networks you control. SSH host certificates, signed with
+    <a href="/ssh-keygen#certificates">ssh-keygen -s -h</a>, remove the question entirely.
+  </p>
+
+  <h2 id="known-hosts">known_hosts: where accepted keys live</h2>
+  <p>
+    When you answer yes, ssh appends the host's key to <code>~/.ssh/known_hosts</code> and prints
+    <code>Warning: Permanently added 'example.com' (ED25519) to the list of known hosts.</code> Each line holds host
+    names or addresses, the key type and the key:
+  </p>
+  <pre><code>{`example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICjC3B8SRdvp0H36PKIVoOSLOR8PA2GXw+6tRPH+FQ0z
+[example.com]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHk...
+|1|R0JGhBG4GK12kjyx8DLsGdYJMyo=|IZiy4Emfl0LePJey1mkH+kmU5PE= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM2...`}</code></pre>
+  <p>
+    The third line is <strong>hashed</strong>: the host name is stored as a salted hash, so the file does not reveal where
+    you connect. Debian and Ubuntu hash new entries by default (<code>HashKnownHosts yes</code>). You cannot read those
+    names, but <code>ssh-keygen</code> can still find them:
+  </p>
+  <pre><code>{`$ ssh-keygen -F example.com
+# Host example.com found: line 3
+|1|R0JGhBG4GK12kjyx8DLsGdYJMyo=|IZiy4Emfl0LePJey1mkH+kmU5PE= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM2...`}</code></pre>
+  <p>
+    A server reachable on a non-standard port is stored as <code>[host]:port</code>, so look it up and remove it the same
+    way, in quotes: <code>ssh-keygen -R "[example.com]:2222"</code>.
+  </p>
+
+  <h2 id="changed">"REMOTE HOST IDENTIFICATION HAS CHANGED"</h2>
+  <pre><code>{`@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+It is also possible that a host key has just been changed.
+The fingerprint for the ED25519 key sent by the remote host is
+SHA256:hJ3Q0d9fGv0mXbJqfKpXb1wV7m9cS2rYtLz8Nq4uE6A.
+Please contact your system administrator.
+Add correct host key in /home/you/.ssh/known_hosts to get rid of this message.
+Offending ED25519 key in /home/you/.ssh/known_hosts:12
+Host key for example.com has changed and you have requested strict checking.
+Host key verification failed.`}</code></pre>
+  <p>
+    The server's key differs from the one in <code>~/.ssh/known_hosts</code>. That is expected after a reinstall, and
+    it is also what interception looks like. Verify the new fingerprint, then remove the old entry:
+  </p>
+  <pre><code>{`ssh-keygen -R example.com`}</code></pre>
+  <p>
+    <code>ssh-keygen -F example.com</code> shows what you have stored for a host, even when
+    <code>known_hosts</code> is hashed. The <code>known_hosts:12</code> in the message is the line number, so deleting
+    that line in an editor works as well. Reconnect and the usual first-connection prompt appears.
+  </p>
+  <p>
+    A cloud server that got a new public IP address, or a new server reusing an old address, triggers the same warning,
+    or a milder one that the key for the host differs from the key for the IP address. Remove the stale entries for both
+    the name and the address.
+  </p>
+
+  <h2 id="randomart">Randomart and VisualHostKey</h2>
+  <p>
+    The randomart is a drawing of the fingerprint, printed by ssh-keygen when it creates a key and on request with
+    <code>-lv</code>:
+  </p>
+  <pre><code>{`+--[ED25519 256]--+
+|...   +.         |
+|o+.    +         |
+|=..+  o .        |
+| +*o.+ o         |
+| **+o * S        |
+|+=oE+o o .       |
+|oo=Bo            |
+| o*++.           |
+| .+++.           |
++----[SHA256]-----+`}</code></pre>
+  <p>
+    It makes a changed key easier to spot at a glance than a string of base64. <code>VisualHostKey yes</code> in
+    <code>~/.ssh/config</code> shows a server's picture on every connection. It is a recognition aid, not a substitute
+    for comparing the fingerprint on first contact.
+  </p>
+
+  <h2 id="sshfp">Publishing fingerprints in DNS (SSHFP)</h2>
+  <p>
+    A server's administrator can publish host key fingerprints as SSHFP records in DNS. ssh-keygen prints them:
+  </p>
+  <pre><code>{`$ ssh-keygen -r example.com -f /etc/ssh/ssh_host_ed25519_key.pub
+example.com IN SSHFP 4 1 76e2aa78a96ac1a632da16c0c13940615b42225f
+example.com IN SSHFP 4 2 23631c1613af38e8011887f768b9a4d33ed34cac59a0b677da12ba0716e4ed3c`}</code></pre>
+  <p>
+    With <code>VerifyHostKeyDNS yes</code>, the client checks the key against those records. It is only trustworthy when
+    the zone is signed with DNSSEC and your resolver validates it; otherwise ssh still asks.
+  </p>
+
+  <h2 id="github">Matching keys on GitHub, GitLab and cloud panels</h2>
+  <p>
+    GitHub (Settings, SSH and GPG keys) and GitLab (Preferences, SSH Keys) list each key's SHA256 fingerprint. Run
+    <code>ssh-keygen -lf</code> on your <code>.pub</code> files, or use the checker above, and delete keys you no
+    longer recognise.
+  </p>
+  <p>
+    Cloud consoles are less uniform. AWS, for example, shows SHA256 for Ed25519 key pairs but its own MD5 or SHA-1
+    digests for RSA key pairs, computed differently from <code>ssh-keygen -l</code>. If a provider's value does not match
+    either form, check its documentation for how it computes fingerprints before suspecting the key.
+  </p>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <h3>"is not a public key file"</h3>
+  <p>
+    ssh-keygen could not parse the input. Common causes: the key was wrapped onto several lines when copied, the file
+    is in another format such as PuTTY's <code>.ppk</code> or RFC 4716 (convert it with <code>ssh-keygen -i -f</code>),
+    or it is a certificate or private key in a format ssh-keygen does not read.
+  </p>
+  <h3>"Host key verification failed" with no other message</h3>
+  <p>
+    You answered no at the prompt, or ssh ran without a terminal (from a script, cron or CI) and could not ask. Connect
+    once interactively to accept the key after checking it, or add the verified line to <code>known_hosts</code> before
+    the job runs.
+  </p>
+  <h3>The fingerprint in GitHub does not match my file</h3>
+  <p>
+    You are probably looking at a different key. List every key you have with
+    <code>for f in ~/.ssh/*.pub; do ssh-keygen -lf "$f"; done</code> and compare again. Keys you cannot match to a file
+    should be deleted from the account.
+  </p>
+
+  <Faq items={faq} />
+</Article>

@@ -1,0 +1,284 @@
+---
+import Article from '../layouts/Article.astro';
+import Faq from '../components/Faq.astro';
+import { faqSchema } from '../data/howto';
+import { TERMPHIN_APPLICATION } from '../data/site';
+
+const path = '/ai-coding-agent-over-ssh';
+const title = 'Run Claude Code or Codex over SSH from Your Phone';
+const description =
+  'Run Claude Code or Codex on a server and check on it from your phone over SSH: key login, installing the CLI, keeping it running with tmux, and private access.';
+
+const toc = [
+  { id: 'why', label: 'Why run the agent on a server' },
+  { id: 'server', label: 'Step 1: a server and a dedicated user' },
+  { id: 'keys', label: 'Step 2: key login, passwords off' },
+  { id: 'install', label: 'Step 3: install the agent CLI' },
+  { id: 'running', label: 'Step 4: keep it running when you disconnect' },
+  { id: 'private', label: 'Step 5: private access with a mesh VPN' },
+  { id: 'phone', label: 'Checking on a long run from your phone' },
+  { id: 'security', label: 'Security checklist' },
+  { id: 'troubleshooting', label: 'Troubleshooting' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const faq = [
+  {
+    q: 'Can I run Claude Code or Codex on a server without a desktop?',
+    a: 'Yes. Both are command-line programs that run in a terminal, so any Linux server you can reach over SSH works. The sign-in step may ask you to open a link in a browser on another device; follow the prompts the CLI prints.',
+  },
+  {
+    q: 'Does the agent stop when my SSH connection drops?',
+    a: 'If it runs directly in your SSH session, usually yes: the shell gets a hangup signal and its programs exit. Run it inside tmux or screen, or use a client that keeps the session alive on the server, and it carries on.',
+  },
+  {
+    q: 'How big a server does a coding agent need?',
+    a: 'The model runs at the provider, so the CLI itself is light. Size the server for your project instead: its build, tests and dependencies. A small VPS with 2 GB of memory is enough for many projects; heavy builds want more.',
+  },
+  {
+    q: 'Should I open SSH to the internet for this?',
+    a: 'You can, with key-only login and passwords turned off. A mesh VPN such as Tailscale or plain WireGuard lets you close port 22 to the public entirely, which removes the background noise of bots trying to log in.',
+  },
+  {
+    q: 'Is it safe to let the agent run commands without asking?',
+    a: 'Only in a place where its mistakes are cheap: a dedicated user without sudo, a disposable VM or container, and no production credentials. The approval prompts exist for a reason; flags that skip them trade safety for speed.',
+  },
+  {
+    q: 'Why does the agent\'s screen look broken in my terminal?',
+    a: 'Coding agents draw a full-screen interface with colours, box characters and redraws. A client that mishandles the alternate screen, Unicode or resizing garbles it. Check <code>echo $TERM</code> and your locale first, then try a different client.',
+  },
+];
+
+const schema = [faqSchema(faq)];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="AI coding agent over SSH"
+  heading="Run Claude Code or Codex over SSH from your phone"
+  lead="Put the coding agent on a server, start it in a session that survives disconnects, and check on it from your phone whenever you like. Here is a setup that is quick to build and safe to leave running."
+  updated="2026-10-09"
+  schema={schema}
+  mentions={[TERMPHIN_APPLICATION]}
+  termphinPitch="Termphin is an SSH client that draws full-screen terminal programs itself, so coding agents render correctly, and keeps the session alive while your phone is locked."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> On a Linux server, create a user, log in with an SSH key, install Node.js and the
+      agent CLI, and start the agent inside <code>tmux</code>. Detach, lock your phone, and reattach later from any SSH
+      client to see how far it got.
+    </p>
+    <pre><code>{`npm install -g @anthropic-ai/claude-code    # or: npm install -g @openai/codex
+tmux new -A -s agent
+cd ~/projects/app && claude                 # or: codex`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="why">Why run the agent on a server</h2>
+  <p>
+    Coding agents such as Anthropic's Claude Code and OpenAI's Codex CLI work in a terminal: they read your repository,
+    edit files, run commands and tests, and ask before risky steps. A long task can take many minutes. On a laptop that
+    means keeping the lid open and the network up. On a server, the agent keeps working while you are on a train, and
+    your phone becomes the window you check through.
+  </p>
+  <p>
+    The setup has three parts: a server you can reach over SSH with a key, the agent running in a session that does not
+    end when you disconnect, and an SSH client on your phone that can draw the agent's full-screen interface.
+  </p>
+
+  <h2 id="server">Step 1: a server and a dedicated user</h2>
+  <p>
+    Any Linux machine works: a small VPS, a cloud VM, or a computer at home. The agent itself is light because the model
+    runs at the provider; size the machine for your project's builds and tests. Create a separate user for the agent's
+    work, without sudo, so its commands cannot touch the rest of the system:
+  </p>
+  <pre><code>{`sudo adduser dev
+sudo mkdir -p /home/dev/.ssh
+sudo cp ~/.ssh/authorized_keys /home/dev/.ssh/
+sudo chown -R dev:dev /home/dev/.ssh
+sudo chmod 700 /home/dev/.ssh && sudo chmod 600 /home/dev/.ssh/authorized_keys`}</code></pre>
+  <p>
+    Copying your own <code>authorized_keys</code> is a shortcut; you can also add only the key of the device you will
+    use, as in <a href="/add-ssh-key-to-server">Add an SSH key to a server</a>.
+  </p>
+
+  <h2 id="keys">Step 2: key login, passwords off</h2>
+  <p>
+    Use an SSH key for every device you connect from, ideally <a href="/ssh-key-on-phone">a separate key for your
+    phone</a> with a passphrase. Create one with <code>ssh-keygen -t ed25519</code> or the
+    <a href="/">generator on this site</a>, and confirm that key login works for the new user before you change anything
+    else:
+  </p>
+  <pre><code>ssh dev@203.0.113.10</code></pre>
+  <p>Then turn off password logins and direct root logins, so bots guessing passwords get nowhere:</p>
+  <pre><code>{`sudo tee /etc/ssh/sshd_config.d/00-hardening.conf <<'EOF'
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+EOF
+sudo sshd -t && sudo systemctl reload ssh    # sshd on Fedora and RHEL`}</code></pre>
+  <p>
+    Keep your current session open and test a new login from a second terminal before closing it. Some cloud images set
+    <code>PasswordAuthentication yes</code> in a file of their own inside <code>sshd_config.d</code>; check with
+    <code>sudo sshd -T | grep -i passwordauthentication</code>.
+  </p>
+
+  <h2 id="install">Step 3: install the agent CLI</h2>
+  <p>
+    Both CLIs below are distributed through npm and need a current Node.js. Install Node.js from your distribution, from
+    NodeSource or with nvm; nvm installs into your home folder, so global packages do not need sudo. Log in as the
+    <code>dev</code> user and run:
+  </p>
+  <pre><code>{`# Claude Code
+npm install -g @anthropic-ai/claude-code
+claude
+
+# Codex CLI
+npm install -g @openai/codex
+codex`}</code></pre>
+  <p>
+    The first start asks you to sign in or to provide an API key. On a server without a browser, the CLI shows a link or
+    code to complete in a browser on another device; follow its prompts. The vendors also publish other installers and
+    change details between releases, so check their current documentation if a step looks different.
+  </p>
+  <p>
+    Clone the project the agent will work on. Give the server its own deploy key or SSH key for the git host instead of
+    copying your laptop's key there, as described in <a href="/ssh-key-for-github#deploy-keys">deploy keys</a>.
+  </p>
+  <pre><code>{`ssh-keygen -t ed25519 -C "dev@agent-server" -f ~/.ssh/id_ed25519
+cat ~/.ssh/id_ed25519.pub     # add as a deploy key or to a machine account
+git clone git@github.com:owner/app.git ~/projects/app`}</code></pre>
+
+  <h2 id="running">Step 4: keep it running when you disconnect</h2>
+  <p>
+    A program started in a plain SSH session is tied to it. When the connection drops, because you locked the phone or
+    changed networks, the shell is hung up and the agent usually exits mid-task. There are three ways around it.
+  </p>
+  <h3>tmux: the interactive session lives on the server</h3>
+  <pre><code>{`tmux new -A -s agent          # attach, or create if missing
+cd ~/projects/app && claude    # or codex
+# detach with Ctrl+b, then d; the agent keeps working
+tmux attach -t agent           # later, from any device`}</code></pre>
+  <p>
+    This is the most flexible option and works with any client. Make it automatic with
+    <code>ssh -t dev@203.0.113.10 tmux new -A -s agent</code>. More on tmux, screen and keepalives in
+    <a href="/ssh-connection-keeps-dropping">SSH connection keeps dropping</a>.
+  </p>
+  <h3>nohup: a non-interactive run with a log</h3>
+  <p>
+    Both CLIs have a non-interactive mode that takes a prompt and exits when done: <code>claude -p</code> and
+    <code>codex exec</code>. Combined with <code>nohup</code> it survives the disconnect and writes everything to a file:
+  </p>
+  <pre><code>{`cd ~/projects/app
+nohup claude -p "Run the test suite and fix the failing tests" > ~/agent.log 2>&1 &
+tail -f ~/agent.log`}</code></pre>
+  <p>
+    In this mode the agent cannot ask you questions, so what it may do without approval depends on its settings. Read the
+    CLI's documentation on permissions before you leave it alone.
+  </p>
+  <h3>A client that keeps the session</h3>
+  <p>
+    The third way needs no setup on your side. Termphin, an SSH client from the team behind this site, uploads a small
+    open-source helper to the server that keeps the shell running when the connection drops and reattaches you with the
+    screen as it was. You start the agent as usual, lock the phone, and come back to the same view.
+  </p>
+
+  <h2 id="private">Step 5: private access with a mesh VPN</h2>
+  <p>
+    An SSH port on the internet with key-only login is reasonable. Closing it is better. A mesh VPN such as Tailscale, or
+    your own WireGuard, gives the server and your phone private addresses that only your devices can reach:
+  </p>
+  <ol>
+    <li>Install the VPN on the server and on your phone, and sign both into the same network.</li>
+    <li>Connect to the server's private address or name instead of its public IP, and check that it works.</li>
+    <li>Only then restrict SSH to the VPN interface in the firewall.</li>
+  </ol>
+  <pre><code>{`sudo ufw allow in on tailscale0 to any port 22 proto tcp
+sudo ufw delete allow OpenSSH
+sudo ufw enable
+sudo ufw status verbose`}</code></pre>
+  <p>
+    Keep the cloud provider's web console at hand in case you lock yourself out. Your SSH client sees nothing special:
+    just a different host name.
+  </p>
+
+  <h2 id="phone">Checking on a long run from your phone</h2>
+  <p>Connect, reattach and look around:</p>
+  <pre><code>{`tmux attach -t agent       # the agent's screen, as you left it
+git -C ~/projects/app status
+git -C ~/projects/app diff --stat
+tail -n 50 ~/agent.log     # for nohup runs`}</code></pre>
+  <p>A few things make this pleasant on a small screen:</p>
+  <ul>
+    <li>
+      <strong>A client that draws full-screen programs correctly.</strong> Coding agents use colours, box characters,
+      spinners and constant redraws. Clients that handle the alternate screen and resizing badly turn that into noise.
+    </li>
+    <li>
+      <strong>Easy special keys.</strong> You will press <kbd>Esc</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Tab</kbd> and
+      the arrow keys often to interrupt, accept or move through choices. A toolbar with these keys beats hunting for them
+      on an on-screen keyboard.
+    </li>
+    <li>
+      <strong>Sessions that survive a locked screen.</strong> You check, lock the phone, and check again an hour later
+      without logging in and reattaching every time.
+    </li>
+  </ul>
+  <p>
+    Termphin was built for this case: the terminal is drawn by the app rather than a web view, so agents and programs
+    like htop and vim render correctly, the special-keys toolbar is yours to arrange, and its helper keeps the session
+    alive across a locked screen or a network switch. It also has an SFTP file browser for a quick look at the files the
+    agent changed.
+  </p>
+
+  <h2 id="security">Security checklist</h2>
+  <ul>
+    <li>A dedicated user without sudo for the agent's work.</li>
+    <li>Key-only SSH login, root login off, and a passphrase on the keys of your laptop and phone.</li>
+    <li>A separate key on the server for the git host, limited to the repositories it needs.</li>
+    <li>No production credentials or customer data on the machine. Treat it as something an automated tool controls.</li>
+    <li>Keep the agent's approval prompts on unless the machine is disposable.</li>
+    <li>Updates: <code>sudo apt update &amp;&amp; sudo apt upgrade</code> regularly, or unattended upgrades.</li>
+  </ul>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <h3>"command not found" after npm install</h3>
+  <p>
+    npm's global folder is not on your <code>PATH</code>. Run <code>npm prefix -g</code> and add its <code>bin</code>
+    subfolder to <code>PATH</code> in <code>~/.bashrc</code>. With nvm, open a new shell or run
+    <code>source ~/.nvm/nvm.sh</code>.
+  </p>
+  <h3>"EACCES: permission denied" during npm install -g</h3>
+  <p>
+    Global installs are trying to write to a system folder. Do not use sudo with npm; install Node.js with nvm, or set a
+    prefix in your home folder with <code>npm config set prefix ~/.npm-global</code> and add
+    <code>~/.npm-global/bin</code> to <code>PATH</code>.
+  </p>
+  <h3>Garbled boxes or question marks on screen</h3>
+  <p>
+    The server's locale is not UTF-8 or <code>TERM</code> is wrong. Check <code>locale</code> and
+    <code>echo $TERM</code>; inside tmux it should be <code>tmux-256color</code> or <code>screen-256color</code>, outside
+    usually <code>xterm-256color</code>. Install a UTF-8 locale with <code>sudo locale-gen en_US.UTF-8</code> on Debian
+    and Ubuntu.
+  </p>
+  <h3>The agent stopped when I locked the phone</h3>
+  <p>
+    It was running directly in the SSH session. Start it inside tmux next time, or use a client that keeps the session
+    alive. To find out what it finished, check <code>git status</code> and the log.
+  </p>
+  <h3>"Permission denied (publickey)" for the new user</h3>
+  <p>
+    The key is not in <code>/home/dev/.ssh/authorized_keys</code> or the permissions are too open. The folder must be
+    <code>700</code>, the file <code>600</code>, both owned by <code>dev</code>.
+  </p>
+
+  <Faq items={faq} />
+</Article>

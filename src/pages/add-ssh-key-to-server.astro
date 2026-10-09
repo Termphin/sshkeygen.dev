@@ -1,0 +1,390 @@
+---
+import Article from '../layouts/Article.astro';
+import HowToSteps from '../components/HowToSteps.astro';
+import Faq from '../components/Faq.astro';
+import { faqSchema, howToSchema, type HowToStep } from '../data/howto';
+
+const path = '/add-ssh-key-to-server';
+const title = 'How to Add an SSH Key to a Server (authorized_keys)';
+const description =
+  'Install a public key on a Linux server with ssh-copy-id or by hand, get authorized_keys permissions right, disable password logins and fix publickey errors.';
+
+const toc = [
+  { id: 'how-it-works', label: 'How key login works' },
+  { id: 'steps', label: 'Add an SSH key to a server, step by step' },
+  { id: 'ssh-copy-id', label: 'What ssh-copy-id does' },
+  { id: 'other-user', label: 'Add a key for another user' },
+  { id: 'authorized-keys', label: 'Inside authorized_keys' },
+  { id: 'permissions', label: 'Permissions sshd requires' },
+  { id: 'disable-passwords', label: 'Disable password login safely' },
+  { id: 'cloud', label: 'Cloud servers and panels' },
+  { id: 'revoke', label: 'Remove or rotate a key' },
+  { id: 'troubleshooting', label: 'Troubleshooting "Permission denied (publickey)"' },
+  { id: 'other-errors', label: 'Other common errors' },
+  { id: 'windows-server', label: 'Windows servers' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const steps: HowToStep[] = [
+  {
+    name: 'Have a key pair ready',
+    html: 'You need the public key, the <code>.pub</code> file. If you do not have one yet, run <code>ssh-keygen -t ed25519</code> or generate one in your browser with the <a href="/">sshkeygen.dev generator</a>.',
+  },
+  {
+    name: 'Copy the key with ssh-copy-id',
+    html: 'From your computer, run ssh-copy-id with the public key and the account you want to log in as. It asks for that account\'s password one last time.',
+    code: 'ssh-copy-id -i ~/.ssh/id_ed25519.pub user@host',
+    after: 'For a non-standard port add <code>-p 2222</code>. ssh-copy-id skips keys that are already installed, so running it twice is harmless.',
+  },
+  {
+    name: 'Or append it by hand',
+    html: 'Without ssh-copy-id (on Windows, for example), pipe the key over an ordinary SSH session. This creates the folder and file if needed and sets their permissions:',
+    code: 'cat ~/.ssh/id_ed25519.pub | ssh user@host "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"',
+  },
+  {
+    name: 'Log in with the key',
+    html: 'Connect again. You should be asked for the key\'s passphrase, or nothing if ssh-agent holds it, but not for the account password.',
+    code: 'ssh -i ~/.ssh/id_ed25519 user@host',
+  },
+  {
+    name: 'Turn off password logins',
+    html: 'Once key login works for every account you need, and with a second session still open as a safety net, set these in <code>/etc/ssh/sshd_config</code> and reload the SSH service:',
+    code: 'PubkeyAuthentication yes\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password',
+    after: 'Check the file with <code>sudo sshd -t</code>, then reload with <code>sudo systemctl reload ssh</code> on Debian and Ubuntu or <code>sudo systemctl reload sshd</code> on Fedora, RHEL and Arch.',
+  },
+];
+
+const faq = [
+  {
+    q: 'Where does the public key go on the server?',
+    a: 'In <code>~/.ssh/authorized_keys</code> in the home directory of the account you log in as, for example <code>/home/alice/.ssh/authorized_keys</code>, one key per line. The private key never goes on the server.',
+  },
+  {
+    q: 'Can I add several keys to one account?',
+    a: 'Yes. Put each public key on its own line. Any one of them is enough to log in, which is how a team shares a deploy account or how you use one key per device.',
+  },
+  {
+    q: 'Do I need to restart sshd after editing authorized_keys?',
+    a: 'No. sshd reads <code>authorized_keys</code> on every login. You only reload the service after changing <code>/etc/ssh/sshd_config</code> or a file in <code>sshd_config.d</code>.',
+  },
+  {
+    q: 'Is ssh-copy-id safe to run twice?',
+    a: 'Yes. It first tries to log in with the key and skips keys that already work, so it does not create duplicate lines.',
+  },
+  {
+    q: 'What if password login is already disabled and I have no key on the server?',
+    a: 'You need another way in: the cloud provider\'s console or key field, a rescue system, or someone who already has access appending your public key for you. Send them the <code>.pub</code> file only.',
+  },
+  {
+    q: 'Should root log in with a key?',
+    a: 'It is better to log in as a normal user and use sudo. If root must log in directly, <code>PermitRootLogin prohibit-password</code>, the OpenSSH default, allows keys and refuses passwords.',
+  },
+  {
+    q: 'How do I add a key to a server I reach through a jump host?',
+    a: 'ssh-copy-id passes options to ssh, so <code>ssh-copy-id -i ~/.ssh/id_ed25519.pub -o ProxyJump=bastion user@internal-host</code> works, as does a <code>ProxyJump</code> line for that host in <code>~/.ssh/config</code>.',
+  },
+];
+
+const schema = [
+  howToSchema({
+    name: 'How to add an SSH key to a Linux server',
+    description,
+    path,
+    totalTime: 'PT5M',
+    tools: ['OpenSSH', 'ssh-copy-id'],
+    steps,
+  }),
+  faqSchema(faq),
+];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="Add an SSH key to a server"
+  heading="How to add an SSH key to a server"
+  lead="A server trusts a key listed in the account's ~/.ssh/authorized_keys, one public key per line. Put it there, get the permissions right, turn off passwords, and fix Permission denied."
+  updated="2026-10-09"
+  schema={schema}
+  termphinPitch="Logging in to this server from a phone or a flaky network? Termphin is an SSH client whose sessions survive a dropped connection and reattach where you left off, screen included."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> Run <code>ssh-copy-id</code> with your public key and the remote account. It asks for
+      the password once and adds the key to <code>~/.ssh/authorized_keys</code> on the server. Then log in without a
+      password.
+    </p>
+    <pre><code>{`ssh-copy-id -i ~/.ssh/id_ed25519.pub user@host
+ssh user@host`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="how-it-works">How key login works</h2>
+  <p>
+    When you connect, the client tells the server which public key it would like to use. sshd looks the key up in the
+    target account's <code>~/.ssh/authorized_keys</code>. If it is listed, the server asks the client to sign a value
+    that is unique to this session, and checks the signature with the public key. The private key never leaves your
+    computer, and a recorded login cannot be replayed.
+  </p>
+  <p>
+    So adding a key means adding one line, the content of your <code>.pub</code> file, to that file on the server, with
+    permissions sshd accepts. Everything else on this page is either a convenient way to do that or a reason it can fail.
+    If you still need a key, the <a href="/generate-ssh-key-linux">Linux</a>, <a href="/generate-ssh-key-mac">macOS</a>
+    and <a href="/generate-ssh-key-windows">Windows</a> guides cover creating one.
+  </p>
+
+  <h2 id="steps">Add an SSH key to a server, step by step</h2>
+  <HowToSteps steps={steps} />
+
+  <h2 id="ssh-copy-id">What ssh-copy-id does</h2>
+  <p>
+    ssh-copy-id ships with OpenSSH on Linux and macOS. It logs in with whatever works (usually the password), creates
+    <code>~/.ssh</code> and <code>authorized_keys</code> if needed, appends the keys that are not there yet and fixes
+    their permissions. A typical run:
+  </p>
+  <pre><code>{`$ ssh-copy-id -i ~/.ssh/id_ed25519.pub alice@203.0.113.10
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/home/you/.ssh/id_ed25519.pub"
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+alice@203.0.113.10's password:
+
+Number of key(s) added: 1
+
+Now try logging into the machine, with: "ssh -i /home/you/.ssh/id_ed25519 'alice@203.0.113.10'"
+and check to make sure that only the key(s) you wanted were added.`}</code></pre>
+  <p>
+    Always pass <code>-i</code> with the <code>.pub</code> file. Without it, ssh-copy-id installs every key loaded in
+    your agent, or else the newest key in <code>~/.ssh</code>, which may not be the one you meant. <code>-n</code> shows what would be installed without changing
+    anything.
+  </p>
+
+  <h2 id="other-user">Add a key for another user</h2>
+  <p>
+    As an administrator you often install a colleague's public key for them. Do it as that user so the files get the right
+    owner:
+  </p>
+  <pre><code>{`sudo -u bob mkdir -p -m 700 /home/bob/.ssh
+echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... bob@laptop' | sudo -u bob tee -a /home/bob/.ssh/authorized_keys
+sudo chmod 600 /home/bob/.ssh/authorized_keys`}</code></pre>
+  <p>
+    Ask for the <code>.pub</code> file only, and confirm its fingerprint with the person through a second channel, for
+    example by reading <code>ssh-keygen -lf bob.pub</code> to each other. The how and why is in
+    <a href="/ssh-key-fingerprint">SSH key fingerprints</a>.
+  </p>
+
+  <h2 id="authorized-keys">Inside authorized_keys</h2>
+  <p>A typical file holds one key per line, with optional restrictions at the start of a line:</p>
+  <pre><code>{`ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0... you@laptop
+from="203.0.113.0/24" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHk... office
+restrict,command="/usr/local/bin/backup" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM2... backup-job`}</code></pre>
+  <ul>
+    <li><code>from="..."</code> accepts the key only from the listed addresses or networks.</li>
+    <li>
+      <code>command="..."</code> runs that one command whatever the client asks for, ideal for backup or deploy keys. The
+      command the client requested is available to it in <code>$SSH_ORIGINAL_COMMAND</code>.
+    </li>
+    <li>
+      <code>restrict</code> turns off port, agent and X11 forwarding and terminal allocation in one word. Re-enable
+      single features after it, for example <code>restrict,pty</code>.
+    </li>
+    <li>
+      <code>no-port-forwarding</code>, <code>no-agent-forwarding</code>, <code>no-X11-forwarding</code> and
+      <code>no-pty</code> turn off one feature each, if you prefer to list them.
+    </li>
+    <li><code>permitopen="localhost:5432"</code> allows port forwarding to that destination only.</li>
+    <li><code>expiry-time="20271231"</code> makes the key stop working after that date.</li>
+  </ul>
+  <p>
+    To revoke a key, delete its line. Lines starting with <code>#</code> are comments. List fingerprints with
+    <code>ssh-keygen -lf ~/.ssh/authorized_keys</code>.
+  </p>
+  <p>
+    The location is set by <code>AuthorizedKeysFile</code> in <code>sshd_config</code>. The default is
+    <code>.ssh/authorized_keys .ssh/authorized_keys2</code>, relative to the home directory. Some hardened setups move it
+    to a root-owned path such as <code>/etc/ssh/authorized_keys/%u</code>, in which case editing the file in your home
+    changes nothing.
+  </p>
+
+  <h2 id="permissions">Permissions sshd requires</h2>
+  <p>
+    With the default <code>StrictModes yes</code>, sshd ignores <code>authorized_keys</code> if it, the
+    <code>.ssh</code> folder, or the home directory can be written by anyone other than the owner. The fix:
+  </p>
+  <pre><code>{`chmod go-w ~
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/authorized_keys`}</code></pre>
+  <p>
+    Ownership matters too: a file root creates in someone else's home belongs to root, and sshd will not trust it. Fix
+    it with <code>chown -R alice: /home/alice/.ssh</code>. On Fedora, RHEL, Rocky and Alma, also restore the SELinux
+    labels with <code>restorecon -R -v /home/alice/.ssh</code>.
+  </p>
+
+  <h2 id="disable-passwords">Disable password login safely</h2>
+  <p>
+    Key-only login stops password guessing completely. Do it in this order so you cannot lock yourself out:
+  </p>
+  <ol>
+    <li>Confirm that key login works for every account that needs access, including the one you use for sudo.</li>
+    <li>Keep one SSH session open while you change the configuration. Existing sessions survive a reload.</li>
+    <li>
+      Put the settings in a drop-in file. Debian, Ubuntu and Fedora include <code>/etc/ssh/sshd_config.d/*.conf</code> at
+      the top of <code>sshd_config</code>, and for each option the first value sshd reads wins. Cloud images often ship
+      <code>50-cloud-init.conf</code> with <code>PasswordAuthentication yes</code>, which silently overrides a line further
+      down in the main file. A file whose name sorts earlier wins:
+    </li>
+  </ol>
+  <pre><code>{`sudo tee /etc/ssh/sshd_config.d/10-key-only.conf > /dev/null <<'EOF'
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+EOF
+sudo sshd -t && sudo systemctl reload ssh`}</code></pre>
+  <p>
+    Use <code>sshd</code> instead of <code>ssh</code> as the service name on Fedora, RHEL and Arch. Then confirm the
+    effective values and test from a new terminal:
+  </p>
+  <pre><code>{`$ sudo sshd -T | grep -Ei '^(passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication)'
+pubkeyauthentication yes
+passwordauthentication no
+kbdinteractiveauthentication no
+
+$ ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password user@host
+user@host: Permission denied (publickey).`}</code></pre>
+  <p>
+    The refusal is what you want: the server no longer offers passwords at all. Only then close the safety session.
+  </p>
+
+  <h2 id="cloud">Cloud servers and panels</h2>
+  <p>
+    AWS, Google Cloud, Azure, Hetzner, DigitalOcean and others take a public key when you create a server and install
+    it on first boot. The default user varies: <code>ubuntu</code> on Ubuntu images, <code>ec2-user</code> on Amazon
+    Linux, <code>admin</code> on Debian images on AWS, <code>root</code> on many VPS providers.
+  </p>
+  <ul>
+    <li>
+      <strong>Adding a key later</strong> through the panel usually only affects new servers. For a running one, append
+      it to <code>authorized_keys</code> as above.
+    </li>
+    <li>
+      <strong>Google Cloud</strong> keeps keys in project or instance metadata in the form
+      <code>username:ssh-ed25519 AAAA... comment</code> and its guest agent writes them into that user's
+      <code>authorized_keys</code>. With OS Login enabled, metadata keys are ignored.
+    </li>
+    <li>
+      <strong>cloud-init</strong> user data can create users with keys on any provider that supports it:
+    </li>
+  </ul>
+  <pre><code>{`#cloud-config
+users:
+  - default
+  - name: deploy
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... you@laptop`}</code></pre>
+
+  <h2 id="revoke">Remove or rotate a key</h2>
+  <p>
+    When a laptop is lost or a colleague leaves, delete their line from <code>authorized_keys</code> on every server and
+    account. Match lines by fingerprint rather than by comment, since comments are free text:
+  </p>
+  <pre><code>{`ssh-keygen -lf ~/.ssh/authorized_keys`}</code></pre>
+  <p>
+    To rotate your own key, install the new public key first, log in with it, then remove the old line. On many servers
+    this is a job for configuration management or SSH certificates, which the
+    <a href="/ssh-keygen#certificates">ssh-keygen reference</a> introduces.
+  </p>
+
+  <h2 id="troubleshooting">Troubleshooting "Permission denied (publickey)"</h2>
+  <p>Work through these in order.</p>
+  <ol>
+    <li>
+      <strong>See what the client offers.</strong> Run <code>ssh -v user@host</code>. Lines like
+      <code>Offering public key: /home/you/.ssh/id_ed25519</code> show which keys were tried, and
+      <code>Server accepts key</code> shows success. If your key is never offered, add <code>-i</code> or an
+      <code>IdentityFile</code> line.
+    </li>
+    <li>
+      <strong>Check the account.</strong> The key must be in the home of the user you log in as. <code>ssh host</code>
+      uses your local user name, which is often not the remote one.
+    </li>
+    <li>
+      <strong>Check permissions and ownership</strong> on the server, as above.
+    </li>
+    <li>
+      <strong>Read the server log.</strong> sshd says exactly why it refused a key. Run
+      <code>sudo journalctl -u ssh -n 50</code> (Debian, Ubuntu) or <code>sudo journalctl -u sshd -n 50</code>, or look
+      in <code>/var/log/auth.log</code> or <code>/var/log/secure</code>. "Authentication refused: bad ownership or modes"
+      points at permissions.
+    </li>
+    <li>
+      <strong>Check for a broken line.</strong> A key pasted with line breaks, or a private key pasted by mistake, will
+      not match. Each key must be a single line.
+    </li>
+    <li>
+      <strong>SELinux.</strong> On Fedora, RHEL, Rocky and Alma, wrong file labels block sshd even with correct modes.
+      Run <code>restorecon -Rv ~/.ssh</code>.
+    </li>
+    <li>
+      <strong>Old servers and RSA.</strong> OpenSSH 8.8 and later clients no longer sign with SHA-1. A server older
+      than OpenSSH 7.2 only understands that, so RSA keys fail against it. Upgrade the server, use an Ed25519 key if it
+      supports one, or, as a last resort, add <code>PubkeyAcceptedAlgorithms +ssh-rsa</code> for that host in your
+      client config.
+    </li>
+    <li>
+      <strong>sshd configuration.</strong> Confirm <code>PubkeyAuthentication</code> is not <code>no</code> and that
+      <code>AuthorizedKeysFile</code> points where you think, with <code>sudo sshd -T | grep -i authorizedkeys</code>.
+    </li>
+  </ol>
+  <p>
+    The list in the error tells you what the server still allows: <code>(publickey)</code> means keys only;
+    <code>(publickey,password)</code> means the key failed and you mistyped the password or cancelled the prompt.
+  </p>
+
+  <h2 id="other-errors">Other common errors</h2>
+  <h3>"Received disconnect ... Too many authentication failures"</h3>
+  <p>
+    Your agent holds many keys and ssh offered them all before the right one; the server stops after six attempts by
+    default (<code>MaxAuthTries</code>). Name the key for that host and add <code>IdentitiesOnly yes</code>, or run
+    <code>ssh -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519 user@host</code>.
+  </p>
+  <h3>"WARNING: UNPROTECTED PRIVATE KEY FILE!"</h3>
+  <p>
+    This one is on your side: the private key is readable by others and ssh ignores it. Run
+    <code>chmod 600 ~/.ssh/id_ed25519</code>.
+  </p>
+  <h3>"Host key verification failed"</h3>
+  <p>
+    The server presented a host key that differs from the one in your <code>known_hosts</code>, typically after a
+    reinstall. Check the new fingerprint on the server's console, then remove the old entry with
+    <code>ssh-keygen -R host</code>.
+  </p>
+  <h3>"no matching host key type found. Their offer: ssh-rsa"</h3>
+  <p>
+    The server's OpenSSH is too old to sign its host key with SHA-2. Upgrade it; meanwhile
+    <code>HostKeyAlgorithms +ssh-rsa</code> in a <code>Host</code> block for that server lets you connect.
+  </p>
+  <h3>"Connection refused" or "Connection timed out"</h3>
+  <p>
+    The problem is not the key: nothing listens on that port, or a firewall drops the connection. Check the port, that
+    sshd runs (<code>systemctl status ssh</code>), and the provider's firewall or security group.
+  </p>
+
+  <h2 id="windows-server">Windows servers</h2>
+  <p>
+    The OpenSSH Server on Windows reads <code>C:\Users\name\.ssh\authorized_keys</code> for standard users. For
+    members of the Administrators group it reads <code>C:\ProgramData\ssh\administrators_authorized_keys</code>
+    instead, and that file must be writable only by Administrators and SYSTEM. The exact <code>icacls</code> command is
+    in the <a href="/generate-ssh-key-windows#windows-server">Windows guide</a>.
+  </p>
+
+  <Faq items={faq} />
+</Article>

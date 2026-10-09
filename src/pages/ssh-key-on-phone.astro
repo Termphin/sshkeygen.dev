@@ -1,0 +1,276 @@
+---
+import Article from '../layouts/Article.astro';
+import Faq from '../components/Faq.astro';
+import { faqSchema } from '../data/howto';
+import { TERMPHIN_APPLICATION } from '../data/site';
+
+const path = '/ssh-key-on-phone';
+const title = 'Use an SSH Key on Your Phone: Generate, Import, Revoke';
+const description =
+  'How to use an SSH key on a phone: generate it on the device or move one safely, import it into an SSH client, protect it, and revoke it if the phone is lost.';
+
+const toc = [
+  { id: 'choices', label: 'Generate on the phone or bring a key?' },
+  { id: 'generate', label: 'Option 1: generate the key on the phone' },
+  { id: 'transfer', label: 'Option 2: create it elsewhere and move it' },
+  { id: 'never', label: 'Ways not to move a private key' },
+  { id: 'import', label: 'Import the key into an SSH client' },
+  { id: 'passphrase', label: 'Passphrase and app lock' },
+  { id: 'one-key', label: 'One key per device' },
+  { id: 'revoke', label: 'Revoke the key of a lost phone' },
+  { id: 'troubleshooting', label: 'Troubleshooting' },
+  { id: 'faq', label: 'FAQ' },
+];
+
+const faq = [
+  {
+    q: 'Can I use the same SSH key on my laptop and my phone?',
+    a: 'You can, but it is better not to. With one key per device you can revoke a lost phone by deleting one line on each server, and your laptop keeps working. A shared key means replacing it everywhere at once.',
+  },
+  {
+    q: 'Is it safe to email a private key to myself?',
+    a: 'No. The key then sits in your mailbox, the provider\'s servers and every device that syncs mail, usually for years. Generate the key on the phone instead, or move it over a local connection and delete the copies.',
+  },
+  {
+    q: 'Do I need a passphrase on a phone key?',
+    a: 'Yes, unless the client keeps keys in an encrypted store and you accept that. A passphrase means a copied key file is useless on its own. Most clients ask for it once per session or keep it unlocked while the app is open.',
+  },
+  {
+    q: 'Which key type should I use on a phone?',
+    a: 'Ed25519. It is small, fast on any phone and accepted by GitHub, GitLab and every current OpenSSH server. Use RSA 4096 only for old systems that reject Ed25519. See <a href="/ed25519-vs-rsa">Ed25519 vs RSA</a>.',
+  },
+  {
+    q: 'What should I do first if my phone is stolen?',
+    a: 'Remove the phone\'s public key from every server\'s <code>~/.ssh/authorized_keys</code> and from GitHub, GitLab and any other account. A passphrase buys you time, but revoking the key is what actually locks the phone out.',
+  },
+  {
+    q: 'Can a phone use a hardware security key for SSH?',
+    a: 'OpenSSH supports FIDO2 keys of type ed25519-sk and ecdsa-sk, but support on phones depends on the SSH client and the connection to the security key. Check your client\'s documentation before relying on it.',
+  },
+];
+
+const schema = [faqSchema(faq)];
+---
+
+<Article
+  title={title}
+  description={description}
+  path={path}
+  crumb="SSH key on your phone"
+  heading="Use an SSH key on your phone"
+  lead="A phone is a fine SSH client, but it is also easy to lose. Give it its own key, move key files only over safe paths, protect the key with a passphrase, and know how to revoke it."
+  updated="2026-10-09"
+  schema={schema}
+  mentions={[TERMPHIN_APPLICATION]}
+  termphinPitch="Termphin is an SSH client that generates a key on the device or imports an OpenSSH one, passphrase-protected included, and keeps it in an encrypted vault."
+>
+  <div class="note" slot="answer">
+    <p>
+      <strong>Quick answer.</strong> Best: generate a new Ed25519 key inside your SSH client on the phone and add its
+      public key to your servers and GitHub. If you create the key elsewhere, give it a passphrase, move it over a local
+      connection, import it, and delete every other copy. Never send a private key by email or chat.
+    </p>
+    <pre><code>{`ssh-keygen -t ed25519 -C "you@phone" -f ~/phone_ed25519
+ssh-copy-id -i ~/phone_ed25519.pub user@example.com`}</code></pre>
+  </div>
+
+  <nav aria-labelledby="contents-title">
+    <p id="contents-title"><strong>Contents</strong></p>
+    <ul>
+      {toc.map((item) => <li><a href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+
+  <h2 id="choices">Generate on the phone or bring a key?</h2>
+  <p>
+    An SSH key is a pair: the public key goes onto every server and account you want to reach, and the private key stays
+    with you. Anyone who has the private key file, and its passphrase if it has one, can log in as you. So the question
+    for a phone is where the private key is born and how many places it passes through.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Approach</th><th>Private key travels</th><th>Good for</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Generate in the SSH client on the phone</td><td>Nowhere</td><td>Almost everyone</td></tr>
+        <tr><td>Generate on a computer, move it to the phone</td><td>Once, over a path you choose</td><td>Clients that cannot generate keys, or a key you need in a specific format</td></tr>
+        <tr><td>Copy your laptop's existing key</td><td>Once, and now lives on two devices</td><td>Avoid it; see <a href="#one-key">one key per device</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="generate">Option 1: generate the key on the phone</h2>
+  <p>
+    Most SSH clients for phones can create a key. Pick <strong>Ed25519</strong>, give it a name that says which device
+    it belongs to, such as <code>you@phone</code>, and set a passphrase if the client offers one. The client then shows
+    or exports the public key, a single line that starts with <code>ssh-ed25519</code>.
+  </p>
+  <p>Put that public line wherever you want to log in:</p>
+  <ul>
+    <li>
+      <strong>A server you can already reach</strong> from another computer: append the line to
+      <code>~/.ssh/authorized_keys</code> on the server.
+    </li>
+    <li>
+      <strong>GitHub, GitLab or Bitbucket:</strong> paste it under your account's SSH keys, as described in
+      <a href="/ssh-key-for-github">SSH key for GitHub</a>.
+    </li>
+    <li>
+      <strong>A server you reach with a password from the phone:</strong> log in once with the password and append the
+      line from there, then consider turning password logins off.
+    </li>
+  </ul>
+  <pre><code>{`mkdir -p ~/.ssh && chmod 700 ~/.ssh
+echo 'ssh-ed25519 AAAAC3Nz... you@phone' >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys`}</code></pre>
+  <p>
+    Getting the public line from the phone to your computer is harmless: it is public. Email, chat or a notes app are all
+    fine for this half. Details and permissions are in <a href="/add-ssh-key-to-server">Add an SSH key to a server</a>.
+  </p>
+
+  <h2 id="transfer">Option 2: create it elsewhere and move it</h2>
+  <p>
+    If your client cannot generate keys, create a dedicated key for the phone on a computer, or with the
+    <a href="/">generator on this site</a>, which runs in the browser and never sends the key anywhere. Use a passphrase:
+    it means the file is encrypted while it is in transit and sitting in a Downloads folder.
+  </p>
+  <pre><code>{`ssh-keygen -t ed25519 -C "you@phone" -f ~/phone_ed25519
+# type a passphrase when asked
+ssh-copy-id -i ~/phone_ed25519.pub user@example.com`}</code></pre>
+  <p>Then move the private file <code>phone_ed25519</code> to the phone over a path that stays between your devices:</p>
+  <ul>
+    <li><strong>AirDrop</strong> or a similar direct device-to-device transfer, accepted only on your own phone.</li>
+    <li><strong>A USB cable</strong>, copying the file into the phone's storage or the client's import folder.</li>
+    <li><strong>A local file</strong> on the phone itself, if you generated the key in a browser on the phone.</li>
+    <li><strong>Scanning a QR code</strong>, if your client supports importing keys that way, from a screen nobody else can see.</li>
+  </ul>
+  <p>After importing, delete every other copy, including the one on the computer if it is not needed there:</p>
+  <pre><code>{`rm ~/phone_ed25519
+rm ~/Downloads/phone_ed25519     # if the browser saved one`}</code></pre>
+  <p>
+    On the phone, delete the file from Downloads or Files once the client has imported it. Check the recently deleted
+    folder too, if your file manager has one.
+  </p>
+
+  <h2 id="never">Ways not to move a private key</h2>
+  <ul>
+    <li><strong>Email</strong>, even to yourself. The key ends up on mail servers and in every synced mailbox, for years.</li>
+    <li><strong>Chat apps and messengers</strong>, including "message to self". They keep history and sync it to other devices.</li>
+    <li>
+      <strong>Cloud drives and notes apps</strong>, unless the file is protected by a strong passphrase and you delete it
+      right after. Cloud copies show up in backups and version history.
+    </li>
+    <li>
+      <strong>A shared clipboard.</strong> Clipboard sync between your devices and clipboard history apps keep what you
+      copy. If you must paste a key, clear the clipboard afterwards.
+    </li>
+    <li><strong>Screenshots</strong> of the key. They go to photo libraries and photo backups.</li>
+  </ul>
+
+  <h2 id="import">Import the key into an SSH client</h2>
+  <p>
+    Clients differ in the details but the steps are the same: open the key settings, choose import, pick the file or
+    paste its contents, and type the passphrase if the key has one. The file must be the private key, the one without
+    <code>.pub</code>, starting with:
+  </p>
+  <pre><code>{`-----BEGIN OPENSSH PRIVATE KEY-----`}</code></pre>
+  <p>
+    Keys from current ssh-keygen and from this site use this OpenSSH format. A key that starts with
+    <code>-----BEGIN RSA PRIVATE KEY-----</code> is the older PEM format, which most clients also read. A PuTTY
+    <code>.ppk</code> file usually needs converting first, with PuTTYgen or <code>puttygen key.ppk -O private-openssh -o key</code>.
+  </p>
+  <p>
+    Termphin, an SSH client made by the team behind this site, is one example: it can generate a key on the device or
+    import an OpenSSH key, including one encrypted with a passphrase, and keeps keys in an encrypted vault. Once the key is
+    imported, attach it to a host entry and connect; check the fingerprint the first time, as described in
+    <a href="/ssh-key-fingerprint">SSH key fingerprints</a>.
+  </p>
+
+  <h2 id="passphrase">Passphrase and app lock</h2>
+  <p>
+    A phone can be unlocked, borrowed or backed up, so treat the key like one on a laptop. Two layers help, and they do
+    different jobs:
+  </p>
+  <ul>
+    <li>
+      <strong>The passphrase or the client's encrypted key store</strong> protects the key at rest. A copy of the file or
+      of the app's data is not enough to use it.
+    </li>
+    <li>
+      <strong>An app lock</strong> (a PIN or fingerprint before the client opens) stops someone who picks up your
+      unlocked phone from opening a session. It is an access barrier, not encryption; keep the passphrase or vault as
+      well.
+    </li>
+  </ul>
+  <p>
+    Termphin has both: keys live in an encrypted vault, and an optional app lock asks for a PIN or fingerprint before the
+    app opens. Whatever client you use, keep the phone itself locked with a strong code. More on choosing one in
+    <a href="/ssh-key-passphrase">SSH key passphrases</a>.
+  </p>
+
+  <h2 id="one-key">One key per device</h2>
+  <p>
+    Give every device its own key and label it in the comment: <code>you@laptop</code>, <code>you@phone</code>,
+    <code>you@tablet</code>. The comment appears at the end of each line in <code>authorized_keys</code> and in GitHub's
+    key list, so you can see at a glance which device a key belongs to.
+  </p>
+  <p>
+    It costs a few more lines in <code>authorized_keys</code> and pays off the day a device is lost: you remove its key
+    and nothing else changes. With one shared key, losing the phone means a new key for every device and every server.
+  </p>
+  <p>
+    You can also limit what the phone key may do. In <code>authorized_keys</code>, options in front of the key restrict
+    it, for example to no port forwarding:
+  </p>
+  <pre><code>no-port-forwarding,no-agent-forwarding ssh-ed25519 AAAAC3Nz... you@phone</code></pre>
+
+  <h2 id="revoke">Revoke the key of a lost phone</h2>
+  <p>
+    Revoking means removing the public key wherever it is trusted. Do it from another device as soon as you can, even if
+    the key has a passphrase.
+  </p>
+  <h3>On each server</h3>
+  <p>List the keys with their fingerprints and comments, then delete the phone's line:</p>
+  <pre><code>{`ssh-keygen -lf ~/.ssh/authorized_keys
+cp ~/.ssh/authorized_keys ~/.ssh/authorized_keys.bak
+grep -v 'you@phone' ~/.ssh/authorized_keys.bak > ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys`}</code></pre>
+  <p>
+    Check that your own access still works from a second terminal before you close the first, then delete the backup.
+    Repeat for root's <code>authorized_keys</code> and any other account the phone could reach, including jump hosts.
+  </p>
+  <h3>On GitHub, GitLab and Bitbucket</h3>
+  <p>
+    Open your account's SSH key settings (github.com/settings/keys on GitHub), find the key by its title or fingerprint,
+    and delete it. If the same key was also added as a signing key or a deploy key in a repository, delete those too.
+  </p>
+  <h3>Everything else</h3>
+  <p>
+    Sign the phone out of your accounts, wipe it remotely if you can, and change any passwords the SSH client stored.
+    Then create a fresh key on the replacement phone.
+  </p>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <h3>"Permission denied (publickey)" from the phone</h3>
+  <p>
+    The server does not have this key's public line, or ignores it. Compare the fingerprint the client shows with
+    <code>ssh-keygen -lf ~/.ssh/authorized_keys</code> on the server, and check the permissions: <code>700</code> on
+    <code>~/.ssh</code> and <code>600</code> on <code>authorized_keys</code>.
+  </p>
+  <h3>The client says the key is invalid or unsupported</h3>
+  <p>
+    You probably picked the <code>.pub</code> file, or the file was changed in transit, for example by a notes app that
+    replaced line breaks. Copy the original file again without opening it in an editor. A PuTTY key needs converting
+    first.
+  </p>
+  <h3>"Incorrect passphrase"</h3>
+  <p>
+    Phone keyboards add capital letters and replace quotes with typographic ones. Turn off auto-capitalisation for the
+    field, or test the passphrase on a computer with <code>ssh-keygen -y -f phone_ed25519</code>.
+  </p>
+  <h3>GitHub says "Key is already in use"</h3>
+  <p>A key can belong to only one GitHub account. You are re-adding a key that is already on another account; create a new one for the phone.</p>
+
+  <Faq items={faq} />
+</Article>
