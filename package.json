@@ -1,0 +1,27 @@
+{
+  "name": "sshkeygen.dev",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "astro dev --host 0.0.0.0 --port 3001",
+    "build": "astro build",
+    "preview": "astro preview --host 0.0.0.0 --port 3001",
+    "check": "astro check",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "^3.7.4",
+    "@astrojs/svelte": "^9.0.1",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "astro": "^7.3.8",
+    "svelte": "^5.57.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3"
+  }
+}
